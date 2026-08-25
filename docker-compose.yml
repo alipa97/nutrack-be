@@ -1,0 +1,16 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: nutrack-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: nutrack
+    ports:
+      - "5432:5432"
+    volumes:
+      - nutrack_pgdata:/var/lib/postgresql/data
+
+volumes:
+  nutrack_pgdata:

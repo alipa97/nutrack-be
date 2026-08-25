@@ -1,0 +1,286 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Enums
+enum Gender {
+  male
+  female
+  other
+}
+
+enum MealType {
+  breakfast
+  lunch
+  dinner
+  snack
+}
+
+// ==========================================
+// 1. User & Profile Models
+// ==========================================
+
+model User {
+  id             String    @id @default(uuid()) @db.Uuid
+  email          String    @unique
+  passwordHash   String?   @map("password_hash")
+  authProviderId String    @default("local") @map("auth_provider_id")
+  status         String    @default("active")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  profile               UserProfile?
+  measurementHistory    UserMeasurementHistory[]
+  foodLogs              FoodLog[]
+  hydrationLogs         HydrationLog[]
+  reminders             SmartReminder[]
+  badges                UserBadge[]
+  weeklyChallenges      UserWeeklyChallenge[]
+  bctCompletions        UserBctCompletion[]
+
+  @@map("users")
+}
+
+model UserProfile {
+  userId    String   @id @map("user_id") @db.Uuid
+  name      String
+  birthDate DateTime @map("birth_date") @db.Date
+  gender    Gender
+  heightCm  Float    @map("height_cm")
+  weightKg  Float    @map("weight_kg")
+  xp        Int      @default(0)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_profiles")
+}
+
+model UserMeasurementHistory {
+  id          String   @id @default(uuid()) @db.Uuid
+  userId      String   @map("user_id") @db.Uuid
+  measuredAt  DateTime @default(now()) @map("measured_at")
+  heightCm    Float    @map("height_cm")
+  weightKg    Float    @map("weight_kg")
+  bmi         Float
+  bmiCategory String   @map("bmi_category")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, measuredAt])
+  @@map("user_measurement_history")
+}
+
+// ==========================================
+// 2. Food, Catalog & Logging Models
+// ==========================================
+
+model FoodGroup {
+  id          String   @id @default(uuid()) @db.Uuid
+  name        String   @unique
+  description String?  @db.Text
+  isActive    Boolean  @default(true) @map("is_active")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  foodCatalogs FoodCatalog[]
+
+  @@map("food_groups")
+}
+
+model FoodCatalog {
+  id              String   @id @default(uuid()) @db.Uuid
+  name            String   @unique
+  foodGroupId     String   @map("food_group_id") @db.Uuid
+  defaultImageUrl String?  @map("default_image_url")
+  source          String   @default("system")
+  isActive        Boolean  @default(true) @map("is_active")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  foodGroup FoodGroup @relation(fields: [foodGroupId], references: [id], onDelete: Cascade)
+  foodLogs  FoodLog[]
+
+  @@index([foodGroupId])
+  @@map("food_catalog")
+}
+
+model FoodLog {
+  id            String    @id @default(uuid()) @db.Uuid
+  userId        String    @map("user_id") @db.Uuid
+  foodCatalogId String?   @map("food_catalog_id") @db.Uuid
+  foodName      String    @map("food_name")
+  mealType      MealType  @map("meal_type")
+  loggedAt      DateTime  @default(now()) @map("logged_at")
+  imageUrl      String?   @map("image_url")
+  isAiDetected  Boolean   @default(false) @map("is_ai_detected")
+  aiConfidence  Float?    @map("ai_confidence")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+
+  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  foodCatalog FoodCatalog? @relation(fields: [foodCatalogId], references: [id], onDelete: SetNull)
+
+  @@index([userId, loggedAt])
+  @@map("food_logs")
+}
+
+// ==========================================
+// 3. Hydration Model
+// ==========================================
+
+model HydrationLog {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  amountMl  Int      @map("amount_ml")
+  loggedAt  DateTime @default(now()) @map("logged_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, loggedAt])
+  @@map("hydration_logs")
+}
+
+// ==========================================
+// 4. Smart Reminders Model
+// ==========================================
+
+model SmartReminder {
+  id           String   @id @default(uuid()) @db.Uuid
+  userId       String   @map("user_id") @db.Uuid
+  title        String
+  description  String   @db.Text
+  reminderTime String   @map("reminder_time")
+  isEnabled    Boolean  @default(true) @map("is_enabled")
+  isDefault    Boolean  @default(false) @map("is_default")
+  iconKey      String?  @map("icon_key")
+  repeatRule   String?  @map("repeat_rule")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, isEnabled])
+  @@map("smart_reminders")
+}
+
+// ==========================================
+// 5. Badges & Gamification Models
+// ==========================================
+
+model Badge {
+  id          String   @id @default(uuid()) @db.Uuid
+  code        String   @unique
+  title       String
+  description String   @db.Text
+  iconKey     String?  @map("icon_key")
+  isActive    Boolean  @default(true) @map("is_active")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  userBadges UserBadge[]
+
+  @@map("badges")
+}
+
+model UserBadge {
+  id         String    @id @default(uuid()) @db.Uuid
+  userId     String    @map("user_id") @db.Uuid
+  badgeId    String    @map("badge_id") @db.Uuid
+  unlockedAt DateTime? @map("unlocked_at")
+  isUnlocked Boolean   @default(false) @map("is_unlocked")
+  createdAt  DateTime  @default(now()) @map("created_at")
+  updatedAt  DateTime  @updatedAt @map("updated_at")
+
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  badge Badge @relation(fields: [badgeId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, badgeId])
+  @@map("user_badges")
+}
+
+model WeeklyChallenge {
+  id          String    @id @default(uuid()) @db.Uuid
+  title       String
+  description String    @db.Text
+  category    String?
+  rewardXp    Int       @map("reward_xp")
+  targetDays  Int       @default(7) @map("target_days")
+  isActive    Boolean   @default(true) @map("is_active")
+  startsOn    DateTime? @map("starts_on") @db.Date
+  endsOn      DateTime? @map("ends_on") @db.Date
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  userChallenges UserWeeklyChallenge[]
+
+  @@map("weekly_challenges")
+}
+
+model UserWeeklyChallenge {
+  id             String    @id @default(uuid()) @db.Uuid
+  userId         String    @map("user_id") @db.Uuid
+  challengeId    String    @map("challenge_id") @db.Uuid
+  weekStart      DateTime  @db.Date @map("week_start")
+  currentDays    Int       @default(0) @map("current_days")
+  isCompleted    Boolean   @default(false) @map("is_completed")
+  startedAt      DateTime  @default(now()) @map("started_at")
+  completedAt    DateTime? @map("completed_at")
+  lastProgressAt DateTime? @map("last_progress_at")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  user      User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  challenge WeeklyChallenge @relation(fields: [challengeId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, challengeId, weekStart])
+  @@index([userId, weekStart])
+  @@map("user_weekly_challenges")
+}
+
+// ==========================================
+// 6. Behavior Change Technique (BCT) Models
+// ==========================================
+
+model BctRecommendation {
+  id            String   @id @default(uuid()) @db.Uuid
+  title         String
+  category      String
+  techniqueName String   @map("technique_name")
+  summary       String   @db.Text
+  fullContent   String   @map("full_content") @db.Text
+  iconKey       String?  @map("icon_key")
+  isActive      Boolean  @default(true) @map("is_active")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  userCompletions UserBctCompletion[]
+
+  @@map("bct_recommendations")
+}
+
+model UserBctCompletion {
+  id                  String   @id @default(uuid()) @db.Uuid
+  userId              String   @map("user_id") @db.Uuid
+  bctRecommendationId String   @map("bct_recommendation_id") @db.Uuid
+  completionDate      DateTime @map("completion_date") @db.Date
+  isCompleted         Boolean  @default(false) @map("is_completed")
+  createdAt           DateTime @default(now()) @map("created_at")
+  updatedAt           DateTime @updatedAt @map("updated_at")
+
+  user              User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  bctRecommendation BctRecommendation @relation(fields: [bctRecommendationId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, bctRecommendationId, completionDate])
+  @@map("user_bct_completions")
+}
