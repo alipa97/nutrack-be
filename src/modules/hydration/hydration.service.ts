@@ -2,6 +2,7 @@ import { Prisma } from '@prisma/client';
 import { prisma } from '../../config/prisma.js';
 import { calculateAge, calculateTargetWaterMl } from '../../utils/bmi.js';
 import { endOfDay, startOfDay } from '../../utils/date.js';
+import { gamificationService } from '../gamification/gamification.service.js';
 
 export const hydrationService = {
   async list(userId: string, date?: string | Date) {
@@ -32,40 +33,36 @@ export const hydrationService = {
       }),
     ]);
 
-    const previousTotal = existingLogs.reduce((sum, item) => sum + item.amountMl, 0);
+    // Only count logs AFTER the last reset (if any reset happened today)
+    const resetAt = profile?.lastHydrationResetAt;
+    const effectiveStart = resetAt && resetAt >= todayStart ? resetAt : todayStart;
+    const activeLogs = existingLogs.filter((l) => l.loggedAt >= effectiveStart);
+    const previousTotal = activeLogs.reduce((sum, item) => sum + item.amountMl, 0);
     const newTotal = previousTotal + amountMl;
 
     const age = calculateAge(profile?.birthDate);
     const targetWaterMl = calculateTargetWaterMl(profile?.gender ?? 'female', age.years);
 
-    // Award +20 XP if this log causes user to hit the AKG target for the first time today
-    const shouldAwardXp = previousTotal < targetWaterMl && newTotal >= targetWaterMl;
+    const log = await prisma.hydrationLog.create({
+      data: {
+        userId,
+        amountMl,
+        loggedAt: new Date(),
+      },
+    });
 
-    const [log] = await prisma.$transaction([
-      prisma.hydrationLog.create({
-        data: {
-          userId,
-          amountMl,
-          loggedAt: new Date(),
-        },
-      }),
-      ...(shouldAwardXp
-        ? [
-            prisma.userProfile.updateMany({
-              where: { userId },
-              data: { xp: { increment: 20 } },
-            }),
-          ]
-        : []),
-    ]);
 
+    // Evaluate gamification weekly challenges asynchronously
+    gamificationService.evaluateWeeklyChallenges(userId).catch((err) => {
+      console.error('Failed to evaluate gamification challenges on water log:', err);
+    });
 
     return {
       log,
       currentWaterMl: newTotal,
       targetWaterMl,
       waterRatio: targetWaterMl > 0 ? Math.min(1.0, newTotal / targetWaterMl) : 0,
-      xpAwarded: shouldAwardXp ? 20 : 0,
+      xpAwarded: 0,
     };
   },
 
@@ -81,7 +78,12 @@ export const hydrationService = {
       }),
     ]);
 
-    const totalMl = logs.reduce((sum, item) => sum + item.amountMl, 0);
+    // Only count logs AFTER the last reset (if any reset happened today)
+    const resetAt = profile?.lastHydrationResetAt;
+    const effectiveStart = resetAt && resetAt >= todayStart ? resetAt : todayStart;
+    const activeLogs = logs.filter((l) => l.loggedAt >= effectiveStart);
+    const totalMl = activeLogs.reduce((sum, item) => sum + item.amountMl, 0);
+
     const age = calculateAge(profile?.birthDate);
     const targetWaterMl = calculateTargetWaterMl(profile?.gender ?? 'female', age.years);
     const waterRatio = targetWaterMl > 0 ? Number(Math.min(1.0, totalMl / targetWaterMl).toFixed(2)) : 0;
@@ -92,18 +94,23 @@ export const hydrationService = {
       targetWaterMl,
       waterRatio,
       isTargetAchieved: totalMl >= targetWaterMl,
-      logsCount: logs.length,
+      logsCount: activeLogs.length,
+      allLogsCount: logs.length,
     };
   },
 
+  /**
+   * Soft reset: Sets lastHydrationResetAt to now() so the progress bar
+   * resets to 0, but all previous hydration logs are PRESERVED in the database.
+   */
   async resetToday(userId: string) {
-    const todayStart = startOfDay();
-    const todayEnd = endOfDay();
+    const now = new Date();
 
-    await prisma.hydrationLog.deleteMany({
-      where: { userId, loggedAt: { gte: todayStart, lte: todayEnd } },
+    await prisma.userProfile.update({
+      where: { userId },
+      data: { lastHydrationResetAt: now },
     });
 
-    return { message: 'Hydration reset for today', currentWaterMl: 0 };
+    return { message: 'Hydration reset for today (logs preserved)', currentWaterMl: 0 };
   },
 };

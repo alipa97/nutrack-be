@@ -28,3 +28,21 @@ export const requireAuth = (req: AuthenticatedRequest, res: Response, next: Next
     return void res.status(401).json({ message: 'Invalid token' });
   }
 };
+
+export const optionalAuth = (req: AuthenticatedRequest, _res: Response, next: NextFunction) => {
+  const header = req.headers.authorization;
+
+  if (!header?.startsWith('Bearer ')) {
+    return next();
+  }
+
+  const token = header.slice(7);
+
+  try {
+    const payload = verifyAccessToken(token);
+    req.user = { id: payload.sub, email: payload.email };
+  } catch {
+    // If token invalid, proceed as guest
+  }
+  next();
+};

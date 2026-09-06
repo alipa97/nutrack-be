@@ -6,6 +6,7 @@ const createFoodLogSchema = z.object({
   foodName: z.string().min(1),
   mealType: z.enum(['breakfast', 'lunch', 'dinner', 'snack']),
   foodCatalogId: z.string().uuid().nullable().optional(),
+  foodGroupName: z.string().nullable().optional(),
   loggedAt: z.string().nullable().optional(),
   imageUrl: z.string().nullable().optional(),
   isAiDetected: z.boolean().optional().default(false),

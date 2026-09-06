@@ -43,19 +43,35 @@ model User {
   weeklyChallenges      UserWeeklyChallenge[]
   bctCompletions        UserBctCompletion[]
 
+  following             UserFollow[]             @relation("UserFollowing")
+  followers             UserFollow[]             @relation("UserFollowers")
+  streakInitiator       StreakPartner[]          @relation("UserStreakInitiator")
+  streakRecipient       StreakPartner[]          @relation("UserStreakRecipient")
+  articleLikes          ArticleLike[]
+  articleBookmarks      ArticleBookmark[]
+  receivedNotifications UserNotification[]       @relation("UserNotifications")
+  sentNotifications     UserNotification[]       @relation("SenderNotifications")
+
   @@map("users")
 }
 
 model UserProfile {
-  userId    String   @id @map("user_id") @db.Uuid
-  name      String
-  birthDate DateTime @map("birth_date") @db.Date
-  gender    Gender
-  heightCm  Float    @map("height_cm")
-  weightKg  Float    @map("weight_kg")
-  xp        Int      @default(0)
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+  userId                String    @id @map("user_id") @db.Uuid
+  name                  String
+  birthDate             DateTime  @map("birth_date") @db.Date
+  gender                Gender
+  heightCm              Float     @map("height_cm")
+  weightKg              Float     @map("weight_kg")
+  xp                    Int       @default(0)
+  inviteCode            String?   @unique @map("invite_code")
+  school                String?   @map("school")
+  bio                   String?   @map("bio")
+  avatarLetter          String?   @map("avatar_letter")
+  currentStreakDays     Int       @default(0) @map("current_streak_days")
+  longestStreakDays     Int       @default(0) @map("longest_streak_days")
+  lastHydrationResetAt  DateTime? @map("last_hydration_reset_at")
+  createdAt             DateTime  @default(now()) @map("created_at")
+  updatedAt             DateTime  @updatedAt @map("updated_at")
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -152,25 +168,48 @@ model HydrationLog {
 }
 
 // ==========================================
-// 4. Smart Reminders Model
+// 4. Smart Reminders Models (Template + User)
 // ==========================================
+
+model ReminderTemplate {
+  id           String   @id @default(uuid()) @db.Uuid
+  category     String?  @map("category")
+  subType      String?  @map("sub_type")
+  optionNumber Int      @default(1) @map("option_number")
+  title        String
+  description  String   @db.Text
+  reminderTime String   @map("reminder_time")
+  iconKey      String?  @map("icon_key")
+  isActive     Boolean  @default(true) @map("is_active")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  userReminders SmartReminder[]
+
+  @@map("reminder_templates")
+}
 
 model SmartReminder {
   id           String   @id @default(uuid()) @db.Uuid
   userId       String   @map("user_id") @db.Uuid
+  templateId   String?  @map("template_id") @db.Uuid
+  category     String?  @map("category")
+  subType      String?  @map("sub_type")
+  optionNumber Int?     @default(1) @map("option_number")
   title        String
   description  String   @db.Text
   reminderTime String   @map("reminder_time")
   isEnabled    Boolean  @default(true) @map("is_enabled")
-  isDefault    Boolean  @default(false) @map("is_default")
   iconKey      String?  @map("icon_key")
   repeatRule   String?  @map("repeat_rule")
   createdAt    DateTime @default(now()) @map("created_at")
   updatedAt    DateTime @updatedAt @map("updated_at")
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user     User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  template ReminderTemplate? @relation(fields: [templateId], references: [id], onDelete: SetNull)
 
   @@index([userId, isEnabled])
+  @@index([userId, templateId])
   @@map("smart_reminders")
 }
 
@@ -249,38 +288,162 @@ model UserWeeklyChallenge {
 }
 
 // ==========================================
-// 6. Behavior Change Technique (BCT) Models
+// 6. Food Group Recommendations (Client Master & BCT Dataset)
 // ==========================================
 
-model BctRecommendation {
-  id            String   @id @default(uuid()) @db.Uuid
-  title         String
-  category      String
-  techniqueName String   @map("technique_name")
-  summary       String   @db.Text
-  fullContent   String   @map("full_content") @db.Text
-  iconKey       String?  @map("icon_key")
-  isActive      Boolean  @default(true) @map("is_active")
-  createdAt     DateTime @default(now()) @map("created_at")
-  updatedAt     DateTime @updatedAt @map("updated_at")
+model FoodGroupRecommendation {
+  id              String   @id @default(uuid()) @db.Uuid
+  no              Int      @unique
+  foodGroupName   String   @unique @map("food_group_name")
+  targetDirection String   @map("target_direction")
+  targetDaily     Int      @default(1) @map("target_daily")
+  targetWeekly    Int      @default(7) @map("target_weekly")
+  messageKurang   String   @db.Text @map("message_kurang")
+  messageSesuai   String   @db.Text @map("message_sesuai")
+  messageLebih    String   @db.Text @map("message_lebih")
+  iconKey         String?  @map("icon_key")
+  isActive        Boolean  @default(true) @map("is_active")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
 
   userCompletions UserBctCompletion[]
 
-  @@map("bct_recommendations")
+  @@map("food_group_recommendations")
 }
 
 model UserBctCompletion {
-  id                  String   @id @default(uuid()) @db.Uuid
-  userId              String   @map("user_id") @db.Uuid
-  bctRecommendationId String   @map("bct_recommendation_id") @db.Uuid
-  completionDate      DateTime @map("completion_date") @db.Date
-  isCompleted         Boolean  @default(false) @map("is_completed")
-  createdAt           DateTime @default(now()) @map("created_at")
-  updatedAt           DateTime @updatedAt @map("updated_at")
+  id                        String   @id @default(uuid()) @db.Uuid
+  userId                    String   @map("user_id") @db.Uuid
+  foodGroupRecommendationId String   @map("food_group_recommendation_id") @db.Uuid
+  completionDate            DateTime @map("completion_date") @db.Date
+  isCompleted               Boolean  @default(false) @map("is_completed")
+  createdAt                 DateTime @default(now()) @map("created_at")
+  updatedAt                 DateTime @updatedAt @map("updated_at")
 
-  user              User              @relation(fields: [userId], references: [id], onDelete: Cascade)
-  bctRecommendation BctRecommendation @relation(fields: [bctRecommendationId], references: [id], onDelete: Cascade)
+  user                    User                    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  foodGroupRecommendation FoodGroupRecommendation @relation(fields: [foodGroupRecommendationId], references: [id], onDelete: Cascade)
 
-  @@unique([userId, bctRecommendationId, completionDate])
+  @@unique([userId, foodGroupRecommendationId, completionDate])
   @@map("user_bct_completions")
+}
+
+// ==========================================
+// 7. Social Friends & Streak Connection Models
+// ==========================================
+
+model UserFollow {
+  id          String   @id @default(uuid()) @db.Uuid
+  followerId  String   @map("follower_id") @db.Uuid
+  followingId String   @map("following_id") @db.Uuid
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  follower    User     @relation("UserFollowing", fields: [followerId], references: [id], onDelete: Cascade)
+  following   User     @relation("UserFollowers", fields: [followingId], references: [id], onDelete: Cascade)
+
+  @@unique([followerId, followingId])
+  @@map("user_follows")
+}
+
+model StreakPartner {
+  id           String    @id @default(uuid()) @db.Uuid
+  userId       String    @map("user_id") @db.Uuid
+  partnerId    String    @map("partner_id") @db.Uuid
+  status       String    @default("pending") // "pending", "active", "rejected", "ended"
+  streakDays   Int       @default(1) @map("streak_days")
+  lastPingAt   DateTime? @map("last_ping_at")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+
+  user         User      @relation("UserStreakInitiator", fields: [userId], references: [id], onDelete: Cascade)
+  partner      User      @relation("UserStreakRecipient", fields: [partnerId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, partnerId])
+  @@map("streak_partners")
+}
+
+// ==========================================
+// 8. Education & Nutrition Articles Models
+// ==========================================
+
+model EducationArticle {
+  id               String   @id @default(uuid()) @db.Uuid
+  title            String
+  category         String
+  readTimeMinutes  String   @default("3 menit") @map("read_time_minutes")
+  summary          String   @db.Text
+  contentMarkdown  String   @db.Text @map("content_markdown")
+  imageUrl         String?  @map("image_url")
+  tag              String?
+  sourceUrl        String?  @map("source_url")
+  author           String   @default("Tim Ahli Gizi NUTRACK")
+  publishedDate    String   @default("Hari ini") @map("published_date")
+  keyTakeaways     String[] @default([]) @map("key_takeaways")
+  isActive         Boolean  @default(true) @map("is_active")
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  likes            ArticleLike[]
+  bookmarks        ArticleBookmark[]
+
+  @@map("education_articles")
+}
+
+model ArticleLike {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  articleId String   @map("article_id") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  article   EducationArticle @relation(fields: [articleId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, articleId])
+  @@map("article_likes")
+}
+
+model ArticleBookmark {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  articleId String   @map("article_id") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  article   EducationArticle @relation(fields: [articleId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, articleId])
+  @@map("article_bookmarks")
+}
+
+model NutritionGlossary {
+  id         String   @id @default(uuid()) @db.Uuid
+  term       String   @unique
+  category   String
+  definition String   @db.Text
+  isActive   Boolean  @default(true) @map("is_active")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  @@map("nutrition_glossary")
+}
+
+// ==========================================
+// 9. In-App User Notifications
+// ==========================================
+
+model UserNotification {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  senderId  String?  @map("sender_id") @db.Uuid
+  type      String   // 'streak_invite', 'streak_ping', 'streak_accept', 'streak_end'
+  title     String
+  message   String
+  isRead    Boolean  @default(false) @map("is_read")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  user   User  @relation("UserNotifications", fields: [userId], references: [id], onDelete: Cascade)
+  sender User? @relation("SenderNotifications", fields: [senderId], references: [id], onDelete: SetNull)
+
+  @@index([userId, isRead])
+  @@map("user_notifications")
 }

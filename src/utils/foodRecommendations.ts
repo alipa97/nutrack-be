@@ -17,20 +17,49 @@ export const BASE_FOOD_RECOMMENDATIONS: FoodGroupRecommendationConfig[] = [
   {
     no: 1,
     name: 'Serealia',
-    aliases: ['serealia', 'karbohidrat', 'makanan pokok', 'cereal', 'grains'],
+    aliases: [
+      'serealia',
+      'karbohidrat',
+      'makanan pokok',
+      'cereal',
+      'grains',
+      'nasi',
+      'beras',
+      'mie',
+      'mi',
+      'bihun',
+      'kwetiau',
+      'roti',
+      'jagung',
+      'gandum',
+      'oat',
+      'oatmeal',
+      'pasta',
+      'spaghetti',
+    ],
     targetDirection: 'minimal',
     targetDaily: 1,
     targetWeekly: 7,
     messageKurang:
       'Yuk, tambah porsi makanan pokok, seperti nasi, mi, roti, kentang, atau sereal biar energi kamu buat aktivitas seharian tetap oke!',
-    messageSesuai: 'Keren! Konsumsi makanan pokok kamu udah pas! Pertahankan ya.',
+    messageSesuai: 'Keren! konsumsi makanan pokok kamu udah pas! Pertahankan ya.',
     messageLebih:
       'Konsumsi makanan pokok kamu udah lebih dari cukup, sekarang seimbangin juga sama sayur dan protein ya!',
   },
   {
     no: 2,
     name: 'Sayur/Umbi Kaya Vitamin A',
-    aliases: ['sayur kaya vit. a', 'sayur/umbi kaya vitamin a', 'sayur kaya vitamin a', 'vitamin a vegetables', 'wortel', 'labu'],
+    aliases: [
+      'sayur kaya vit. a',
+      'sayur/umbi kaya vitamin a',
+      'sayur kaya vitamin a',
+      'vitamin a vegetables',
+      'wortel',
+      'labu kuning',
+      'ubi jalar',
+      'ubi oranye',
+      'ubi merah',
+    ],
     targetDirection: 'minimal',
     targetDaily: 1,
     targetWeekly: 7,
@@ -42,7 +71,16 @@ export const BASE_FOOD_RECOMMENDATIONS: FoodGroupRecommendationConfig[] = [
   {
     no: 3,
     name: 'Umbi & Akar Putih',
-    aliases: ['umbi & akar putih', 'umbi dan akar putih', 'white roots', 'singkong', 'talas'],
+    aliases: [
+      'umbi & akar putih',
+      'umbi dan akar putih',
+      'white roots',
+      'singkong',
+      'talas',
+      'kentang',
+      'ubi kayu',
+      'ubi putih',
+    ],
     targetDirection: 'minimal',
     targetDaily: 1,
     targetWeekly: 7,
@@ -54,7 +92,18 @@ export const BASE_FOOD_RECOMMENDATIONS: FoodGroupRecommendationConfig[] = [
   {
     no: 4,
     name: 'Sayuran Hijau Berdaun Gelap',
-    aliases: ['sayur hijau gelap', 'sayuran hijau berdaun gelap', 'dark green vegetables', 'bayam', 'kangkung'],
+    aliases: [
+      'sayur hijau gelap',
+      'sayuran hijau berdaun gelap',
+      'dark green vegetables',
+      'bayam',
+      'kangkung',
+      'daun singkong',
+      'sawi',
+      'sawi hijau',
+      'pakcoy',
+      'selada',
+    ],
     targetDirection: 'minimal',
     targetDaily: 1,
     targetWeekly: 7,
@@ -66,7 +115,26 @@ export const BASE_FOOD_RECOMMENDATIONS: FoodGroupRecommendationConfig[] = [
   {
     no: 5,
     name: 'Sayuran Lainnya',
-    aliases: ['sayuran lainnya', 'other vegetables', 'tomat', 'timun', 'terong', 'brokoli'],
+    aliases: [
+      'sayuran lainnya',
+      'other vegetables',
+      'tomat',
+      'timun',
+      'mentimun',
+      'terong',
+      'brokoli',
+      'buncis',
+      'kol',
+      'kubis',
+      'kembang kol',
+      'tauge',
+      'toge',
+      'capcay',
+      'sayur asam',
+      'sayur lodeh',
+      'oyong',
+      'labu siam',
+    ],
     targetDirection: 'minimal',
     targetDaily: 1,
     targetWeekly: 7,
@@ -77,7 +145,15 @@ export const BASE_FOOD_RECOMMENDATIONS: FoodGroupRecommendationConfig[] = [
   {
     no: 6,
     name: 'Buah Kaya Vitamin A',
-    aliases: ['buah kaya vit. a', 'buah kaya vitamin a', 'vitamin a fruits', 'pepaya', 'mangga'],
+    aliases: [
+      'buah kaya vit. a',
+      'buah kaya vitamin a',
+      'vitamin a fruits',
+      'pepaya',
+      'mangga',
+      'melon',
+      'blewah',
+    ],
     targetDirection: 'minimal',
     targetDaily: 1,
     targetWeekly: 7,
@@ -88,7 +164,21 @@ export const BASE_FOOD_RECOMMENDATIONS: FoodGroupRecommendationConfig[] = [
   {
     no: 7,
     name: 'Buah Lainnya',
-    aliases: ['buah lainnya', 'other fruits', 'pisang', 'apel', 'jeruk', 'semangka'],
+    aliases: [
+      'buah lainnya',
+      'other fruits',
+      'pisang',
+      'apel',
+      'jeruk',
+      'semangka',
+      'salak',
+      'buah naga',
+      'alpukat',
+      'jambu',
+      'nanas',
+      'strawberi',
+      'pir',
+    ],
     targetDirection: 'minimal',
     targetDaily: 1,
     targetWeekly: 7,
@@ -99,7 +189,20 @@ export const BASE_FOOD_RECOMMENDATIONS: FoodGroupRecommendationConfig[] = [
   {
     no: 8,
     name: 'Daging',
-    aliases: ['daging & jeroan', 'daging', 'meat', 'ayam', 'sapi', 'bebek'],
+    aliases: [
+      'daging & jeroan',
+      'daging',
+      'meat',
+      'ayam',
+      'sapi',
+      'bebek',
+      'kambing',
+      'hati ayam',
+      'hati sapi',
+      'jeroan',
+      'bakso',
+      'sosis',
+    ],
     targetDirection: 'minimal',
     targetDaily: 1,
     targetWeekly: 7,
@@ -110,7 +213,7 @@ export const BASE_FOOD_RECOMMENDATIONS: FoodGroupRecommendationConfig[] = [
   {
     no: 9,
     name: 'Telur',
-    aliases: ['telur', 'eggs', 'telur ayam', 'telur puyuh'],
+    aliases: ['telur', 'eggs', 'telur ayam', 'telur puyuh', 'telur bebek', 'dadar', 'ceplok'],
     targetDirection: 'minimal',
     targetDaily: 1,
     targetWeekly: 7,
@@ -121,7 +224,23 @@ export const BASE_FOOD_RECOMMENDATIONS: FoodGroupRecommendationConfig[] = [
   {
     no: 10,
     name: 'Ikan',
-    aliases: ['ikan & seafood', 'ikan', 'fish', 'seafood', 'udang', 'cumi'],
+    aliases: [
+      'ikan & seafood',
+      'ikan',
+      'fish',
+      'seafood',
+      'udang',
+      'cumi',
+      'kepiting',
+      'teri',
+      'lele',
+      'nila',
+      'tongkol',
+      'tuna',
+      'salmon',
+      'gurame',
+      'bandeng',
+    ],
     targetDirection: 'minimal',
     targetDaily: 1,
     targetWeekly: 7,
@@ -132,7 +251,19 @@ export const BASE_FOOD_RECOMMENDATIONS: FoodGroupRecommendationConfig[] = [
   {
     no: 11,
     name: 'Kacang-kacangan, Biji-bijian & Polong',
-    aliases: ['kacang-kacangan', 'kacang-kacangan, biji-bijian & polong', 'legumes', 'tempe', 'tahu'],
+    aliases: [
+      'kacang-kacangan',
+      'kacang-kacangan, biji-bijian & polong',
+      'legumes',
+      'tempe',
+      'tahu',
+      'kedelai',
+      'kacang tanah',
+      'kacang merah',
+      'kacang hijau',
+      'kacang polong',
+      'edamame',
+    ],
     targetDirection: 'minimal',
     targetDaily: 1,
     targetWeekly: 7,
@@ -144,7 +275,16 @@ export const BASE_FOOD_RECOMMENDATIONS: FoodGroupRecommendationConfig[] = [
   {
     no: 12,
     name: 'Susu & Produk Susu',
-    aliases: ['susu & produk susu', 'susu dan produk susu', 'milk', 'dairy', 'keju', 'yogurt'],
+    aliases: [
+      'susu & produk susu',
+      'susu dan produk susu',
+      'susu',
+      'milk',
+      'dairy',
+      'keju',
+      'yogurt',
+      'yoghurt',
+    ],
     targetDirection: 'minimal',
     targetDaily: 1,
     targetWeekly: 7,
@@ -155,7 +295,25 @@ export const BASE_FOOD_RECOMMENDATIONS: FoodGroupRecommendationConfig[] = [
   {
     no: 13,
     name: 'UPF (Ultra-Processed Food)',
-    aliases: ['upf', 'upf (ultra-processed)', 'ultra-processed', 'ultra processed', 'makanan kemasan'],
+    aliases: [
+      'upf',
+      'upf (ultra-processed)',
+      'ultra-processed',
+      'ultra processed',
+      'makanan kemasan',
+      'mi instan',
+      'mie instan',
+      'snack',
+      'chiki',
+      'ciki',
+      'biskuit',
+      'wafer',
+      'soda',
+      'minuman kemasan',
+      'minuman manis',
+      'fast food',
+      'nugget',
+    ],
     targetDirection: 'maksimal',
     targetDaily: 1,
     targetWeekly: 7,
@@ -177,7 +335,7 @@ export interface FoodGroupEvaluationResult {
   status: EvaluationStatus;
   statusLabel: string;
   isPositiveStatus: boolean;
-  message: string;
+  message: string | null;
 }
 
 export const findRecommendationConfig = (groupIdentifier: string): FoodGroupRecommendationConfig | undefined => {
@@ -189,6 +347,37 @@ export const findRecommendationConfig = (groupIdentifier: string): FoodGroupReco
   );
 };
 
+/**
+ * Extracts all matching IDDS food group names from a food log.
+ * Handles both direct catalog linkage and natural language parsing with word boundaries.
+ */
+export const extractFoodGroupsFromLog = (
+  foodName: string,
+  catalogGroupName?: string | null
+): string[] => {
+  // 1. If catalog group is already associated with this log, use it as the single source of truth!
+  if (catalogGroupName) {
+    const matched = findRecommendationConfig(catalogGroupName);
+    return [matched ? matched.name : catalogGroupName];
+  }
+
+  // 2. Fallback: match the single primary food group from the food name
+  const nameLower = (foodName || '').toLowerCase();
+
+  for (const config of BASE_FOOD_RECOMMENDATIONS) {
+    for (const alias of config.aliases) {
+      const escaped = alias.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const regex = new RegExp(`(^|[^a-zA-Z0-9])${escaped}([^a-zA-Z0-9]|$)`, 'i');
+      if (regex.test(nameLower)) {
+        return [config.name];
+      }
+    }
+  }
+
+  // 3. Ultimate fallback
+  return ['Serealia'];
+};
+
 export const evaluateFoodGroup = (
   config: FoodGroupRecommendationConfig,
   actualCount: number,
@@ -196,42 +385,43 @@ export const evaluateFoodGroup = (
 ): FoodGroupEvaluationResult => {
   const targetCount = period === 'daily' ? config.targetDaily : config.targetWeekly;
   let status: EvaluationStatus;
-  let message: string;
+  let message: string | null = null;
   let isPositiveStatus = false;
   let statusLabel = '';
 
   if (config.targetDirection === 'minimal') {
     if (actualCount < targetCount) {
       status = 'kurang';
-      statusLabel = 'Kurang dari target';
-      message = config.messageKurang;
+      statusLabel = period === 'daily' ? 'Belum dikonsumsi' : 'Kurang dari target';
+      message = period === 'weekly' ? config.messageKurang : null;
       isPositiveStatus = false;
     } else if (actualCount === targetCount) {
       status = 'sesuai';
       statusLabel = 'Sesuai anjuran';
-      message = config.messageSesuai;
+      message = period === 'weekly' ? config.messageSesuai : null;
       isPositiveStatus = true;
     } else {
       status = 'lebih';
       statusLabel = 'Lebih dari target';
-      message = config.messageLebih;
+      message = period === 'weekly' ? config.messageLebih : null;
       isPositiveStatus = true;
     }
   } else {
+    // UPF (Maksimal 1 kali/hari, 7 kali/minggu)
     if (actualCount < targetCount) {
       status = 'kurang';
-      statusLabel = 'Bagus (Sangat rendah)';
-      message = config.messageKurang;
+      statusLabel = period === 'daily' ? 'Bagus (Belum dikonsumsi)' : 'Bagus (Sangat rendah)';
+      message = period === 'weekly' ? config.messageKurang : null;
       isPositiveStatus = true;
     } else if (actualCount === targetCount) {
       status = 'sesuai';
       statusLabel = 'Batas wajar';
-      message = config.messageSesuai;
+      message = period === 'weekly' ? config.messageSesuai : null;
       isPositiveStatus = true;
     } else {
       status = 'lebih';
       statusLabel = 'Melebihi batas maksimal';
-      message = config.messageLebih;
+      message = period === 'weekly' ? config.messageLebih : null;
       isPositiveStatus = false;
     }
   }
@@ -272,10 +462,12 @@ export const generateAllFoodGroupEvaluations = (
     const evaluation = evaluateFoodGroup(config, count, period);
     evaluations.push(evaluation);
 
-    if (!evaluation.isPositiveStatus) {
+    // Klien: Kalimat rekomendasi BCT hanya dimunculkan per minggu
+    if (period === 'weekly' && !evaluation.isPositiveStatus && evaluation.message) {
       priorityAdvices.push(evaluation.message);
     }
   }
 
   return { evaluations, priorityAdvices };
 };
+

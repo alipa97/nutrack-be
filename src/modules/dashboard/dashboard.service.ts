@@ -6,9 +6,9 @@ import {
   getBctAdvice,
   getNutritionalStatus,
 } from '../../utils/bmi.js';
-import { endOfDay, getWeekStartDate, startOfDay, toDateOnlyString } from '../../utils/date.js';
+import { endOfDay, getWeekEndDate, getWeekStartDate, startOfDay, toDateOnlyString } from '../../utils/date.js';
 
-import { generateAllFoodGroupEvaluations } from '../../utils/foodRecommendations.js';
+import { extractFoodGroupsFromLog, generateAllFoodGroupEvaluations, findRecommendationConfig } from '../../utils/foodRecommendations.js';
 import { calculateStreakDays } from '../../utils/streak.js';
 
 export const dashboardService = {
@@ -18,6 +18,8 @@ export const dashboardService = {
     const todayEnd = endOfDay(targetDate);
     const currentWeekStart = getWeekStartDate(targetDate);
 
+    const rolling7DaysStart = startOfDay(new Date(targetDate.getTime() - 6 * 24 * 60 * 60 * 1000));
+
     const [
       user,
       todayFoodLogs,
@@ -26,6 +28,11 @@ export const dashboardService = {
       completedChallenges,
       unlockedBadges,
       allFoodLogs,
+      pastWeekFoodLogs,
+      dbRecommendations,
+      followersCount,
+      followingCount,
+      activePartnerStreaks,
     ] = await Promise.all([
       prisma.user.findUnique({
         where: { id: userId },
@@ -42,7 +49,7 @@ export const dashboardService = {
       }),
       prisma.hydrationLog.findMany({
         where: { userId, loggedAt: { gte: todayStart, lte: todayEnd } },
-        orderBy: { loggedAt: 'desc' },
+        orderBy: { loggedAt: 'asc' },
       }),
       prisma.userMeasurementHistory.findFirst({
         where: { userId },
@@ -59,10 +66,34 @@ export const dashboardService = {
         select: { loggedAt: true },
         orderBy: { loggedAt: 'desc' },
       }),
+      prisma.foodLog.findMany({
+        where: { userId, loggedAt: { gte: rolling7DaysStart, lte: todayEnd } },
+        include: {
+          foodCatalog: {
+            include: { foodGroup: true },
+          },
+        },
+        orderBy: { loggedAt: 'desc' },
+      }),
+      prisma.foodGroupRecommendation.findMany({
+        where: { isActive: true },
+        orderBy: { no: 'asc' },
+      }),
+      prisma.userFollow.count({ where: { followingId: userId } }),
+      prisma.userFollow.count({ where: { followerId: userId } }),
+      prisma.streakPartner.findMany({
+        where: {
+          OR: [{ userId }, { partnerId: userId }],
+          status: 'active',
+        },
+      }),
     ]);
 
     // Streaks
-    const streakDays = calculateStreakDays(allFoodLogs.map((item) => item.loggedAt));
+    const streakDays = calculateStreakDays(allFoodLogs.map((item: { loggedAt: Date }) => item.loggedAt));
+    const partnerStreakDays = activePartnerStreaks.length > 0
+      ? Math.max(...activePartnerStreaks.map((s) => s.streakDays))
+      : 0;
 
     // IDDS & UPF Calculations
     const consumedGroupsMap = new Map<string, { id: string; name: string; isUpf: boolean; count: number }>();
@@ -70,21 +101,21 @@ export const dashboardService = {
     let upfCount = 0;
 
     for (const log of todayFoodLogs) {
-      const group = log.foodCatalog?.foodGroup;
-      if (group) {
-        const isUpf = group.name.toLowerCase().includes('upf') || group.name.toLowerCase().includes('ultra');
+      const groups = extractFoodGroupsFromLog(log.foodName, log.foodCatalog?.foodGroup?.name);
+      for (const grpName of groups) {
+        const isUpf = grpName.toLowerCase().includes('upf') || grpName.toLowerCase().includes('ultra');
         if (isUpf) {
           upfCount++;
         }
-        consumedCountsByName[group.name] = (consumedCountsByName[group.name] || 0) + 1;
+        consumedCountsByName[grpName] = (consumedCountsByName[grpName] || 0) + 1;
 
-        const existing = consumedGroupsMap.get(group.id);
+        const existing = consumedGroupsMap.get(grpName);
         if (existing) {
           existing.count++;
         } else {
-          consumedGroupsMap.set(group.id, {
-            id: group.id,
-            name: group.name,
+          consumedGroupsMap.set(grpName, {
+            id: log.foodCatalog?.foodGroup?.id || grpName,
+            name: grpName,
             isUpf,
             count: 1,
           });
@@ -93,8 +124,7 @@ export const dashboardService = {
     }
 
     const consumedGroups = Array.from(consumedGroupsMap.values());
-    const nonUpfGroupsCount = consumedGroups.filter((g) => !g.isUpf).length;
-    const iddsScoreToday = Math.min(12, nonUpfGroupsCount);
+    const iddsScoreToday = Math.min(13, consumedGroups.length);
 
     let iddsCategoryLabel = 'Keberagaman Pangan Tinggi';
     let iddsCategoryColor = '#10AC84'; // Green
@@ -109,11 +139,93 @@ export const dashboardService = {
 
     const isUpfWarningActive = upfCount > 1;
 
-    // Evaluate 13 Food Group Recommendations
-    const { evaluations: foodGroupRecommendations, priorityAdvices } = generateAllFoodGroupEvaluations(
+    // 1. Evaluate 13 Food Group Recommendations for Today (status chips in dashboard)
+    const { evaluations: foodGroupRecommendations } = generateAllFoodGroupEvaluations(
       consumedCountsByName,
       'daily'
     );
+
+    // 2. Weekly BCT Recommendations (based on rolling 7 days / 1-week food logs from food_group_recommendations table)
+    const weeklyCountsByName: Record<string, number> = {};
+    for (const log of pastWeekFoodLogs) {
+      const groups = extractFoodGroupsFromLog(log.foodName, log.foodCatalog?.foodGroup?.name);
+      for (const grp of groups) {
+        weeklyCountsByName[grp] = (weeklyCountsByName[grp] || 0) + 1;
+      }
+    }
+
+    const evaluatedBctList = dbRecommendations.map((rec) => {
+      let actualWeeklyCount = 0;
+      for (const [grpKey, cnt] of Object.entries(weeklyCountsByName)) {
+        const match = findRecommendationConfig(grpKey);
+        if (match && match.no === rec.no) {
+          actualWeeklyCount += cnt;
+        }
+      }
+
+      const isMinimal = rec.targetDirection.toLowerCase() === 'minimal';
+      let status: 'kurang' | 'sesuai' | 'lebih';
+      let message: string;
+      let needsAttention = false;
+      let deficit = 0;
+
+      if (isMinimal) {
+        if (actualWeeklyCount < rec.targetWeekly) {
+          status = 'kurang';
+          message = rec.messageKurang;
+          needsAttention = true;
+          deficit = rec.targetWeekly - actualWeeklyCount;
+        } else if (actualWeeklyCount === rec.targetWeekly) {
+          status = 'sesuai';
+          message = rec.messageSesuai;
+        } else {
+          status = 'lebih';
+          message = rec.messageLebih;
+        }
+      } else {
+        // UPF (Maksimal)
+        if (actualWeeklyCount > rec.targetWeekly) {
+          status = 'lebih';
+          message = rec.messageLebih;
+          needsAttention = true;
+          deficit = 100 + (actualWeeklyCount - rec.targetWeekly);
+        } else if (actualWeeklyCount === rec.targetWeekly) {
+          status = 'sesuai';
+          message = rec.messageSesuai;
+        } else {
+          status = 'kurang';
+          message = rec.messageKurang;
+        }
+      }
+
+      return {
+        id: rec.id,
+        no: rec.no,
+        foodGroupName: rec.foodGroupName,
+        targetDirection: rec.targetDirection,
+        targetWeekly: rec.targetWeekly,
+        actualCount: actualWeeklyCount,
+        status,
+        message,
+        needsAttention,
+        deficit,
+        iconKey: rec.iconKey,
+      };
+    });
+
+    const attentionList = evaluatedBctList
+      .filter((e) => e.needsAttention)
+      .sort((a, b) => b.deficit - a.deficit);
+    const satisfiedList = evaluatedBctList.filter((e) => !e.needsAttention);
+    const prioritizedBctList = [...attentionList, ...satisfiedList];
+
+    // Rotasi harian: agar setiap hari berganti kelompok pangan dan semua mendapatkan giliran pesan
+    const dayOfYear = Math.floor(
+      (targetDate.getTime() - new Date(targetDate.getFullYear(), 0, 0).getTime()) /
+        (1000 * 60 * 60 * 24)
+    );
+    const activeIndex = prioritizedBctList.length > 0 ? dayOfYear % prioritizedBctList.length : 0;
+    const currentBctRecommendation = prioritizedBctList[activeIndex] || null;
 
     // Profile calculations
     const profile = user?.profile;
@@ -123,11 +235,15 @@ export const dashboardService = {
     const bmi = calculateBmi(currentWeight, currentHeight);
     const nutritionalStatus = getNutritionalStatus(bmi);
     const targetWaterMl = calculateTargetWaterMl(profile?.gender ?? 'female', age.years);
-    const topAdvice = priorityAdvices.length > 0 ? priorityAdvices[0] : undefined;
-    const bctAdvice = getBctAdvice(nutritionalStatus.key, topAdvice);
+    const bctAdvice = currentBctRecommendation
+      ? currentBctRecommendation.message
+      : getBctAdvice(nutritionalStatus.key);
 
-    // Hydration calculations
-    const currentWaterMl = todayHydrationLogs.reduce((sum, item) => sum + item.amountMl, 0);
+    // Hydration calculations: Only count logs AFTER the last reset (if any reset happened today)
+    const resetAt = profile?.lastHydrationResetAt;
+    const effectiveStart = resetAt && resetAt >= todayStart ? resetAt : todayStart;
+    const activeHydrationLogs = todayHydrationLogs.filter((l: { loggedAt: Date; amountMl: number }) => l.loggedAt >= effectiveStart);
+    const currentWaterMl = activeHydrationLogs.reduce((sum: number, item: { amountMl: number }) => sum + item.amountMl, 0);
     const waterRatio = targetWaterMl > 0 ? Number(Math.min(1.0, currentWaterMl / targetWaterMl).toFixed(2)) : 0;
 
     return {
@@ -144,15 +260,23 @@ export const dashboardService = {
             nutritionalStatusLabel: nutritionalStatus.label,
             targetWaterMl,
             bctAdvice,
+            followersCount,
+            followingCount,
+            partnerStreakDays,
+            activeStreaksCount: activePartnerStreaks.length,
           }
         : null,
+      bctRecommendation: currentBctRecommendation,
+      bctRecommendations: prioritizedBctList,
       measurement: latestMeasurement,
       streakDays,
+      partnerStreakDays,
+      activeStreaksCount: activePartnerStreaks.length,
       idds: {
         scoreToday: iddsScoreToday,
         categoryLabel: iddsCategoryLabel,
         categoryColor: iddsCategoryColor,
-        consumedGroupsCount: nonUpfGroupsCount,
+        consumedGroupsCount: consumedGroups.length,
         consumedGroups,
         upfCountToday: upfCount,
         isUpfWarningActive,
@@ -169,17 +293,17 @@ export const dashboardService = {
         completedChallengesCount: completedChallenges.length,
       },
       foodGroupRecommendations,
-      priorityAdvices,
+      priorityAdvices: prioritizedBctList.filter((b) => b.needsAttention).map((b) => b.message),
       todayFoodLogs,
     };
   },
 
   async getWeeklyReport(userId: string, date = new Date()) {
     const targetDate = new Date(date);
-    const weekStart = getWeekStartDate(targetDate);
-    const weekEnd = new Date(weekStart);
-    weekEnd.setDate(weekEnd.getDate() + 6);
-    weekEnd.setHours(23, 59, 59, 999);
+    // Rolling 7 days ending on targetDate (i.e. target - 6 days to target)
+    const sevenDaysAgo = new Date(targetDate.getTime() - 6 * 24 * 60 * 60 * 1000);
+    const weekStart = startOfDay(sevenDaysAgo);
+    const weekEnd = endOfDay(targetDate);
 
     const [user, foodLogsInWeek, hydrationLogsInWeek] = await Promise.all([
       prisma.user.findUnique({
@@ -211,8 +335,8 @@ export const dashboardService = {
     const age = calculateAge(profile?.birthDate);
     const targetWaterMl = calculateTargetWaterMl(profile?.gender ?? 'female', age.years);
 
-    // Build 7-day array starting from weekStart (Monday to Sunday)
-    const dayNames = ['Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab', 'Min'];
+    // Build 7-day array ending on targetDate
+    const dayNames = ['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab'];
     const dailyTrends = [];
     let totalScore = 0;
     let daysWithScores = 0;
@@ -220,8 +344,7 @@ export const dashboardService = {
     const consumedCountsByName: Record<string, number> = {};
 
     for (let i = 0; i < 7; i++) {
-      const currentDay = new Date(weekStart);
-      currentDay.setDate(currentDay.getDate() + i);
+      const currentDay = new Date(sevenDaysAgo.getTime() + i * 24 * 60 * 60 * 1000);
       const dayStart = startOfDay(currentDay);
       const dayEnd = endOfDay(currentDay);
 
@@ -230,26 +353,23 @@ export const dashboardService = {
         (log) => log.loggedAt >= dayStart && log.loggedAt <= dayEnd
       );
 
-      // Distinct non-UPF groups on this day
+      // Distinct food groups consumed on this day
       const dayGroupsMap = new Map<string, boolean>();
       for (const log of dayFoods) {
-        const group = log.foodCatalog?.foodGroup;
-        if (group) {
-          const isUpf = group.name.toLowerCase().includes('upf') || group.name.toLowerCase().includes('ultra');
-          if (!isUpf) {
-            dayGroupsMap.set(group.id, true);
-          }
-          consumedCountsByName[group.name] = (consumedCountsByName[group.name] || 0) + 1;
+        const groups = extractFoodGroupsFromLog(log.foodName, log.foodCatalog?.foodGroup?.name);
+        for (const grp of groups) {
+          dayGroupsMap.set(grp, true);
+          consumedCountsByName[grp] = (consumedCountsByName[grp] || 0) + 1;
         }
       }
 
-      const score = Math.min(12, dayGroupsMap.size);
+      const score = Math.min(13, dayGroupsMap.size);
       if (score > 0 || dayFoods.length > 0) {
         totalScore += score;
         daysWithScores++;
       }
 
-      // Filter hydration logs for this day
+      // Total hydration logs for this day (total actual consumption, unaffected by dashboard manual reset)
       const dayHydration = hydrationLogsInWeek.filter(
         (log) => log.loggedAt >= dayStart && log.loggedAt <= dayEnd
       );
@@ -257,7 +377,7 @@ export const dashboardService = {
 
       dailyTrends.push({
         date: toDateOnlyString(currentDay),
-        day: dayNames[i],
+        day: dayNames[currentDay.getDay()],
         score,
         water,
         targetWater: targetWaterMl,

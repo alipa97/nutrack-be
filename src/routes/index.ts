@@ -8,6 +8,9 @@ import { hydrationRouter } from '../modules/hydration/hydration.routes.js';
 import { gamificationRouter } from '../modules/gamification/gamification.routes.js';
 import { reminderRouter } from '../modules/reminders/reminder.routes.js';
 import { bctRouter } from '../modules/bct/bct.routes.js';
+import { educationRouter } from '../modules/education/education.routes.js';
+import { friendsRouter } from '../modules/friends/friends.routes.js';
+import { notificationsRouter } from '../modules/notifications/notifications.routes.js';
 
 export const apiRouter = Router();
 
@@ -20,3 +23,6 @@ apiRouter.use('/hydration', hydrationRouter);
 apiRouter.use('/gamification', gamificationRouter);
 apiRouter.use('/reminders', reminderRouter);
 apiRouter.use('/bct', bctRouter);
+apiRouter.use('/education', educationRouter);
+apiRouter.use('/friends', friendsRouter);
+apiRouter.use('/notifications', notificationsRouter);

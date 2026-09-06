@@ -1,13 +1,15 @@
 import { Prisma } from '@prisma/client';
 import { prisma } from '../../config/prisma.js';
 import { endOfDay, startOfDay } from '../../utils/date.js';
-import { generateAllFoodGroupEvaluations } from '../../utils/foodRecommendations.js';
+import { extractFoodGroupsFromLog, generateAllFoodGroupEvaluations } from '../../utils/foodRecommendations.js';
+import { gamificationService } from '../gamification/gamification.service.js';
 
 export type MealTypeEnum = 'breakfast' | 'lunch' | 'dinner' | 'snack';
 
 export type CreateFoodLogInput = {
   foodCatalogId?: string | null;
   foodName: string;
+  foodGroupName?: string | null;
   mealType: MealTypeEnum;
   loggedAt?: string | Date | null;
   imageUrl?: string | null;
@@ -19,7 +21,12 @@ export const foodService = {
   async listLogs(userId: string, date?: string | Date) {
     const where: Prisma.FoodLogWhereInput = { userId };
     if (date) {
-      const d = new Date(date);
+      let d: Date;
+      if (typeof date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(date)) {
+        d = new Date(`${date}T00:00:00.000+07:00`);
+      } else {
+        d = new Date(date);
+      }
       where.loggedAt = {
         gte: startOfDay(d),
         lte: endOfDay(d),
@@ -42,43 +49,120 @@ export const foodService = {
 
     let catalogId = input.foodCatalogId ?? undefined;
     if (!catalogId) {
-      const match = await prisma.foodCatalog.findFirst({
-        where: { name: { contains: input.foodName, mode: 'insensitive' } },
+      const cleanFoodName = input.foodName.trim().toLowerCase();
+      const catalogs = await prisma.foodCatalog.findMany({
+        where: { isActive: true },
+        include: { foodGroup: true },
       });
+
+      const isGroupMatch = (dbGroupName: string, inputGroup?: string): boolean => {
+        if (!inputGroup) return false;
+        const a = dbGroupName.toLowerCase().trim();
+        const b = inputGroup.toLowerCase().trim();
+        if (a === b) return true;
+        if ((a.includes('upf') || a.includes('ultra')) && (b.includes('upf') || b.includes('ultra'))) return true;
+        if (a.includes('hijau') && b.includes('hijau')) return true;
+        if ((a.includes('vit') || a.includes('vitamin')) && a.includes('sayur') && b.includes('sayur')) return true;
+        if ((a.includes('vit') || a.includes('vitamin')) && a.includes('buah') && b.includes('buah')) return true;
+        if (a.includes('ikan') && (b.includes('ikan') || b.includes('seafood'))) return true;
+        if (a.includes('umbi') && b.includes('umbi')) return true;
+        if (a.includes('kacang') && b.includes('kacang')) return true;
+        if (a.includes('susu') && b.includes('susu')) return true;
+        return a.includes(b) || b.includes(a);
+      };
+
+      const fgName = input.foodGroupName || undefined;
+
+      // 1. Exact match by catalog name (replacing underscore with space)
+      const exactMatches = catalogs.filter(
+        (c) => c.name.replace(/_/g, ' ').toLowerCase() === cleanFoodName
+      );
+      let match: (typeof catalogs)[0] | undefined =
+        exactMatches.find((c) => isGroupMatch(c.foodGroup.name, fgName)) ||
+        exactMatches[0];
+
+      // 2. Substring match prioritizing matching food group (if fgName is provided)
+      if (!match && fgName) {
+        const groupCatalogs = catalogs.filter((c) =>
+          isGroupMatch(c.foodGroup.name, fgName)
+        );
+        // Sort descending by name length (longest / most specific match first)
+        groupCatalogs.sort((a, b) => b.name.length - a.name.length);
+        match = groupCatalogs.find((c) => {
+          const catName = c.name.replace(/_/g, ' ').toLowerCase();
+          return cleanFoodName.includes(catName) || catName.includes(cleanFoodName);
+        });
+      }
+
+      // 3. Substring match across all catalogs, sorted by name length descending (longest match first)
+      if (!match) {
+        const sortedCatalogs = [...catalogs].sort((a, b) => b.name.length - a.name.length);
+        if (fgName) {
+          match = sortedCatalogs.find((c) => {
+            const catName = c.name.replace(/_/g, ' ').toLowerCase();
+            return (
+              isGroupMatch(c.foodGroup.name, fgName) &&
+              (cleanFoodName.includes(catName) || catName.includes(cleanFoodName))
+            );
+          });
+        }
+        if (!match) {
+          match = sortedCatalogs.find((c) => {
+            const catName = c.name.replace(/_/g, ' ').toLowerCase();
+            return cleanFoodName.includes(catName) || catName.includes(cleanFoodName);
+          });
+        }
+      }
+
+      // 4. Fallback: match against FoodGroup table description keywords
+      if (!match) {
+        const groups = await prisma.foodGroup.findMany({ where: { isActive: true } });
+        for (const g of groups) {
+          if (g.description) {
+            const keywords = g.description.split(',').map((k) => k.trim().toLowerCase());
+            if (keywords.some((k) => cleanFoodName.includes(k) || k.includes(cleanFoodName))) {
+              match = catalogs.find((c) => c.foodGroupId === g.id);
+              break;
+            }
+          }
+        }
+      }
+
+      // 5. Fallback: match by foodGroupName
+      if (!match && fgName) {
+        match = catalogs.find((c) => isGroupMatch(c.foodGroup.name, fgName));
+      }
+
       if (match) {
         catalogId = match.id;
       }
     }
 
-    const [foodLog] = await prisma.$transaction([
-      prisma.foodLog.create({
-        data: {
-          userId,
-          foodCatalogId: catalogId,
-          foodName: input.foodName,
-          mealType: input.mealType,
-          loggedAt,
-          imageUrl: input.imageUrl ?? undefined,
-          isAiDetected: input.isAiDetected ?? false,
-          aiConfidence: input.aiConfidence ?? undefined,
+    const foodLog = await prisma.foodLog.create({
+      data: {
+        userId,
+        foodCatalogId: catalogId,
+        foodName: input.foodName,
+        mealType: input.mealType,
+        loggedAt,
+        imageUrl: input.imageUrl ?? undefined,
+        isAiDetected: input.isAiDetected ?? false,
+        aiConfidence: input.aiConfidence ?? undefined,
+      },
+      include: {
+        foodCatalog: {
+          include: { foodGroup: true },
         },
-        include: {
-          foodCatalog: {
-            include: { foodGroup: true },
-          },
-        },
-      }),
-      // Award +50 XP for logging food
-      prisma.userProfile.updateMany({
-        where: { userId },
-        data: { xp: { increment: 50 } },
-      }),
-    ]);
+      },
+    });
 
+    // Evaluate gamification challenges asynchronously
+    gamificationService.evaluateWeeklyChallenges(userId, loggedAt).catch((err) => {
+      console.error('Failed to evaluate gamification challenges on food log:', err);
+    });
 
     return foodLog;
   },
-
 
   async deleteLog(userId: string, logId: string) {
     const existing = await prisma.foodLog.findFirst({
@@ -89,7 +173,14 @@ export const foodService = {
       throw Object.assign(new Error('Food log not found'), { statusCode: 404 });
     }
 
-    return prisma.foodLog.delete({ where: { id: logId } });
+    const deleted = await prisma.foodLog.delete({ where: { id: logId } });
+
+    // Refresh gamification challenges after deletion
+    gamificationService.evaluateWeeklyChallenges(userId, existing.loggedAt).catch((err) => {
+      console.error('Failed to evaluate gamification challenges on food log delete:', err);
+    });
+
+    return deleted;
   },
 
   async updateMealType(userId: string, logId: string, mealType: MealTypeEnum) {
@@ -133,21 +224,21 @@ export const foodService = {
     let upfCount = 0;
 
     for (const log of logs) {
-      const group = log.foodCatalog?.foodGroup;
-      if (group) {
-        const isUpf = group.name.toLowerCase().includes('upf') || group.name.toLowerCase().includes('ultra');
+      const groups = extractFoodGroupsFromLog(log.foodName, log.foodCatalog?.foodGroup?.name);
+      for (const grpName of groups) {
+        const isUpf = grpName.toLowerCase().includes('upf') || grpName.toLowerCase().includes('ultra');
         if (isUpf) {
           upfCount++;
         }
-        consumedCountsByName[group.name] = (consumedCountsByName[group.name] || 0) + 1;
+        consumedCountsByName[grpName] = (consumedCountsByName[grpName] || 0) + 1;
 
-        const existing = consumedGroupsMap.get(group.id);
+        const existing = consumedGroupsMap.get(grpName);
         if (existing) {
           existing.count++;
         } else {
-          consumedGroupsMap.set(group.id, {
-            id: group.id,
-            name: group.name,
+          consumedGroupsMap.set(grpName, {
+            id: log.foodCatalog?.foodGroup?.id || grpName,
+            name: grpName,
             isUpf,
             count: 1,
           });

@@ -86,6 +86,9 @@ export const profileService = {
         gender: nextGender,
         heightCm: nextHeight,
         weightKg: nextWeight,
+        inviteCode: `NUT-${Math.random().toString(36).substring(2, 8).toUpperCase()}`,
+        avatarLetter: (input.name?.[0] ?? 'R').toUpperCase(),
+        school: 'SMA Negeri 1 Jakarta',
         xp: 0,
       },
       update: {
