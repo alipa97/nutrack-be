@@ -2,6 +2,7 @@ import { Prisma } from '@prisma/client';
 import { prisma } from '../../config/prisma.js';
 import { endOfDay, startOfDay } from '../../utils/date.js';
 import { extractFoodGroupsFromLog, generateAllFoodGroupEvaluations } from '../../utils/foodRecommendations.js';
+import { friendsService } from '../friends/friends.service.js';
 import { gamificationService } from '../gamification/gamification.service.js';
 
 export type MealTypeEnum = 'breakfast' | 'lunch' | 'dinner' | 'snack';
@@ -159,6 +160,11 @@ export const foodService = {
     // Evaluate gamification challenges asynchronously
     gamificationService.evaluateWeeklyChallenges(userId, loggedAt).catch((err) => {
       console.error('Failed to evaluate gamification challenges on food log:', err);
+    });
+
+    // Sync partner streaks asynchronously
+    friendsService.syncPartnerStreaksForUser(userId).catch((err) => {
+      console.error('Failed to sync partner streaks on food log:', err);
     });
 
     return foodLog;

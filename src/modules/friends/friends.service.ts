@@ -1,30 +1,22 @@
 import { prisma } from '../../config/prisma.js';
-import { endOfDay, startOfDay } from '../../utils/date.js';
+import { endOfDay, startOfDay, toDateOnlyString } from '../../utils/date.js';
+import { calculatePartnerStreak } from '../../utils/streak.js';
 import { notificationsService } from '../notifications/notifications.service.js';
 
 const MAX_STREAK_PARTNERS = 5;
 
 export const friendsService = {
   async listFriends(userId: string) {
-    const todayStart = startOfDay(new Date());
-    const todayEnd = endOfDay(new Date());
-
     // 1. Get follows & streaks for current user
-    const [followingList, followersList, streaksInitiated, streaksReceived, todayLogs] = await Promise.all([
+    const [followingList, followersList, streaksInitiated, streaksReceived] = await Promise.all([
       prisma.userFollow.findMany({ where: { followerId: userId } }),
       prisma.userFollow.findMany({ where: { followingId: userId } }),
       prisma.streakPartner.findMany({ where: { userId } }),
       prisma.streakPartner.findMany({ where: { partnerId: userId } }),
-      prisma.foodLog.findMany({
-        where: { loggedAt: { gte: todayStart, lte: todayEnd } },
-        select: { userId: true },
-      }),
     ]);
 
     const followingSet = new Set(followingList.map((f) => f.followingId));
     const followerSet = new Set(followersList.map((f) => f.followerId));
-    const scannedTodaySet = new Set(todayLogs.map((l) => l.userId));
-    const myScannedToday = scannedTodaySet.has(userId);
 
     // Collect all related user IDs (following, followers, streak partners)
     const relatedUserIds = new Set<string>([
@@ -45,6 +37,22 @@ export const friendsService = {
       relatedUserIds.add(u.id);
     }
 
+    // Fetch food logs for current user and all related users to evaluate daily scans & partner streaks
+    const relevantUserIds = Array.from(new Set([userId, ...relatedUserIds]));
+    const foodLogs = await prisma.foodLog.findMany({
+      where: { userId: { in: relevantUserIds } },
+      select: { userId: true, loggedAt: true },
+      orderBy: { loggedAt: 'desc' },
+    });
+
+    const logsByUser = new Map<string, Date[]>();
+    for (const log of foodLogs) {
+      const list = logsByUser.get(log.userId) || [];
+      list.push(log.loggedAt);
+      logsByUser.set(log.userId, list);
+    }
+    const myLogs = logsByUser.get(userId) || [];
+
     // 2. Fetch full profiles and badges for all these users
     const allUsers = await prisma.user.findMany({
       where: { id: { in: Array.from(relatedUserIds) } },
@@ -58,44 +66,84 @@ export const friendsService = {
       orderBy: { createdAt: 'desc' },
     });
 
-    // Map streak relations
+    // Fetch pings sent by the current user (userId) within the last 24 hours
+    // This ensures only the SENDER sees the button as "Terkirim", while recipient sees "Ingatkan"
+    const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const mySentPings = await prisma.userNotification.findMany({
+      where: {
+        senderId: userId,
+        type: 'streak_ping',
+        createdAt: { gte: oneDayAgo },
+      },
+      orderBy: { createdAt: 'desc' },
+      select: { userId: true, createdAt: true },
+    });
+
+    const myPingTimeByFriendId = new Map<string, Date>();
+    for (const p of mySentPings) {
+      if (!myPingTimeByFriendId.has(p.userId)) {
+        myPingTimeByFriendId.set(p.userId, p.createdAt);
+      }
+    }
+
+    // Map streak relations with dynamic streak calculation
     const streakMap = new Map<
       string,
       {
+        id: string;
         status: string;
         streakDays: number;
         lastPingAt: Date | null;
         isInitiator: boolean;
+        isStreakLitToday: boolean;
+        myScannedToday: boolean;
+        partnerScannedToday: boolean;
       }
     >();
 
-    for (const s of streaksInitiated) {
-      streakMap.set(s.partnerId, {
-        status: s.status,
-        streakDays: s.streakDays,
-        lastPingAt: s.lastPingAt,
-        isInitiator: true,
-      });
-    }
+    const allStreaks = [
+      ...streaksInitiated.map((s) => ({ ...s, partnerUserId: s.partnerId, isInitiator: true })),
+      ...streaksReceived.map((s) => ({ ...s, partnerUserId: s.userId, isInitiator: false })),
+    ];
 
-    for (const s of streaksReceived) {
-      const existing = streakMap.get(s.userId);
-      if (!existing || existing.status !== 'active') {
-        streakMap.set(s.userId, {
+    for (const s of allStreaks) {
+      const pLogs = logsByUser.get(s.partnerUserId) || [];
+      const streakCalc = calculatePartnerStreak(myLogs, pLogs);
+
+      const isConnected = s.status === 'active';
+      const effectiveStreakDays = isConnected ? streakCalc.streakDays : 0;
+
+      // Sync streakDays to DB if changed
+      if (isConnected && s.streakDays !== effectiveStreakDays) {
+        prisma.streakPartner.update({
+          where: { id: s.id },
+          data: { streakDays: effectiveStreakDays },
+        }).catch((err) => console.error('Failed to sync streakDays to DB:', err));
+      }
+
+      const existing = streakMap.get(s.partnerUserId);
+      if (!existing || s.status === 'active') {
+        streakMap.set(s.partnerUserId, {
+          id: s.id,
           status: s.status,
-          streakDays: s.streakDays,
+          streakDays: effectiveStreakDays,
           lastPingAt: s.lastPingAt,
-          isInitiator: false,
+          isInitiator: s.isInitiator,
+          isStreakLitToday: isConnected && streakCalc.isStreakLitToday,
+          myScannedToday: streakCalc.myScannedToday,
+          partnerScannedToday: streakCalc.partnerScannedToday,
         });
       }
     }
+
+    const todayStr = toDateOnlyString(new Date());
 
     return allUsers.map((u) => {
       const prof = u.profile;
       const streakInfo = streakMap.get(u.id);
 
       const isConnected = streakInfo?.status === 'active';
-      const streakDays = isConnected ? streakInfo?.streakDays ?? 1 : 0;
+      const streakDays = isConnected ? streakInfo.streakDays : 0;
       const hasPendingStreakInvite = streakInfo?.status === 'pending' && !streakInfo.isInitiator;
       const isStreakInvitedByMe = streakInfo?.status === 'pending' && streakInfo.isInitiator;
 
@@ -103,9 +151,13 @@ export const friendsService = {
       const isFollower = followerSet.has(u.id);
       const isMutual = isFollowing && isFollower;
 
-      // Status scan harian: streak baru menyala jika KEDUA user minimal 1x scan makanan hari ini
-      const partnerScannedToday = scannedTodaySet.has(u.id);
-      const isStreakLitToday = isConnected && myScannedToday && partnerScannedToday;
+      // Status scan harian
+      const uLogs = logsByUser.get(u.id) || [];
+      const partnerScannedToday = streakInfo
+        ? streakInfo.partnerScannedToday
+        : uLogs.some((d) => toDateOnlyString(d) === todayStr);
+      const myScannedToday = myLogs.some((d) => toDateOnlyString(d) === todayStr);
+      const isStreakLitToday = isConnected && (streakInfo?.isStreakLitToday ?? false);
 
       const badgeTitles = u.badges.map((b) => b.badge.title);
 
@@ -121,7 +173,7 @@ export const friendsService = {
         myScannedToday,
         partnerScannedToday,
         isStreakLitToday,
-        lastPingTime: streakInfo?.lastPingAt?.toISOString() ?? null,
+        lastPingTime: myPingTimeByFriendId.get(u.id)?.toISOString() ?? null,
         hasPendingStreakInvite,
         isStreakInvitedByMe,
         bio: prof?.bio ?? 'Remaja Peduli Gizi Seimbang & Aktif Bergerak! 🥗',
@@ -372,9 +424,26 @@ export const friendsService = {
       throw Object.assign(new Error('Streak belum aktif'), { statusCode: 400 });
     }
 
-    const updated = await prisma.streakPartner.update({
+    // Cegah spam: periksa apakah pengirim sudah mengirim ping ke teman ini dalam 12 jam terakhir
+    const twelveHoursAgo = new Date(Date.now() - 12 * 60 * 60 * 1000);
+    const existingRecentPing = await prisma.userNotification.findFirst({
+      where: {
+        senderId: userId,
+        userId: targetUserId,
+        type: 'streak_ping',
+        createdAt: { gte: twelveHoursAgo },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    if (existingRecentPing) {
+      return { success: true, lastPingAt: existingRecentPing.createdAt };
+    }
+
+    const now = new Date();
+    await prisma.streakPartner.update({
       where: { id: streak.id },
-      data: { lastPingAt: new Date() },
+      data: { lastPingAt: now },
     });
 
     // Kirim notifikasi in-app ke target user
@@ -388,7 +457,7 @@ export const friendsService = {
       message: `${senderName} mengingatkanmu untuk scan makanan hari ini agar streak tetap menyala!`,
     }).catch((err) => console.error('Error creating ping notification:', err));
 
-    return { success: true, lastPingAt: updated.lastPingAt };
+    return { success: true, lastPingAt: now };
   },
 
   async searchUsers(query: string, currentUserId: string) {
@@ -449,4 +518,60 @@ export const friendsService = {
       badges: u.badges.map((b) => b.badge.title),
     }));
   },
+
+  async syncPartnerStreaksForUser(userId: string) {
+    const activeStreaks = await prisma.streakPartner.findMany({
+      where: {
+        OR: [{ userId }, { partnerId: userId }],
+        status: 'active',
+      },
+    });
+
+    if (activeStreaks.length === 0) return;
+
+    const partnerIds = activeStreaks.map((s) => (s.userId === userId ? s.partnerId : s.userId));
+    const allUserIds = Array.from(new Set([userId, ...partnerIds]));
+
+    const logs = await prisma.foodLog.findMany({
+      where: { userId: { in: allUserIds } },
+      select: { userId: true, loggedAt: true },
+      orderBy: { loggedAt: 'desc' },
+    });
+
+    const logsByUser = new Map<string, Date[]>();
+    for (const l of logs) {
+      const list = logsByUser.get(l.userId) || [];
+      list.push(l.loggedAt);
+      logsByUser.set(l.userId, list);
+    }
+    const myLogs = logsByUser.get(userId) || [];
+
+    const userProfile = await prisma.userProfile.findUnique({ where: { userId } });
+    const userName = userProfile?.name ?? 'Temanmu';
+
+    for (const s of activeStreaks) {
+      const pId = s.userId === userId ? s.partnerId : s.userId;
+      const pLogs = logsByUser.get(pId) || [];
+      const res = calculatePartnerStreak(myLogs, pLogs);
+
+      if (s.streakDays !== res.streakDays) {
+        await prisma.streakPartner.update({
+          where: { id: s.id },
+          data: { streakDays: res.streakDays },
+        });
+
+        // Jika streak hari ini baru saja menyala dan bertambah, kirim notifikasi ke rekan
+        if (res.isStreakLitToday && res.streakDays > 0) {
+          await notificationsService.createNotification({
+            userId: pId,
+            senderId: userId,
+            type: 'streak_accept',
+            title: 'Streak Menyala! 🔥',
+            message: `${userName} baru saja scan makanan! Streak kalian hari ini resmi menyala (${res.streakDays} Hari).`,
+          }).catch(() => {});
+        }
+      }
+    }
+  },
 };
+

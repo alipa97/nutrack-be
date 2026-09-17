@@ -9,7 +9,7 @@ import {
 import { endOfDay, getWeekEndDate, getWeekStartDate, startOfDay, toDateOnlyString } from '../../utils/date.js';
 
 import { extractFoodGroupsFromLog, generateAllFoodGroupEvaluations, findRecommendationConfig } from '../../utils/foodRecommendations.js';
-import { calculateStreakDays } from '../../utils/streak.js';
+import { calculatePartnerStreak, calculateStreakDays } from '../../utils/streak.js';
 
 export const dashboardService = {
   async getSummary(userId: string, date = new Date()) {
@@ -90,10 +90,43 @@ export const dashboardService = {
     ]);
 
     // Streaks
-    const streakDays = calculateStreakDays(allFoodLogs.map((item: { loggedAt: Date }) => item.loggedAt));
-    const partnerStreakDays = activePartnerStreaks.length > 0
-      ? Math.max(...activePartnerStreaks.map((s) => s.streakDays))
-      : 0;
+    const streakDays = calculateStreakDays(allFoodLogs.map((item: { loggedAt: Date }) => item.loggedAt), targetDate);
+
+    // Calculate accurate active partner streak
+    const activePartnerIds = activePartnerStreaks.map((s) => (s.userId === userId ? s.partnerId : s.userId));
+    let partnerStreakDays = 0;
+
+    if (activePartnerIds.length > 0) {
+      const partnerFoodLogs = await prisma.foodLog.findMany({
+        where: { userId: { in: activePartnerIds } },
+        select: { userId: true, loggedAt: true },
+      });
+
+      const pLogsMap = new Map<string, Date[]>();
+      for (const pl of partnerFoodLogs) {
+        const list = pLogsMap.get(pl.userId) || [];
+        list.push(pl.loggedAt);
+        pLogsMap.set(pl.userId, list);
+      }
+
+      const myDates = allFoodLogs.map((item: { loggedAt: Date }) => item.loggedAt);
+      for (const s of activePartnerStreaks) {
+        const pId = s.userId === userId ? s.partnerId : s.userId;
+        const pDates = pLogsMap.get(pId) || [];
+        const partnerRes = calculatePartnerStreak(myDates, pDates, targetDate);
+
+        if (partnerRes.streakDays > partnerStreakDays) {
+          partnerStreakDays = partnerRes.streakDays;
+        }
+
+        if (s.streakDays !== partnerRes.streakDays) {
+          prisma.streakPartner.update({
+            where: { id: s.id },
+            data: { streakDays: partnerRes.streakDays },
+          }).catch(() => {});
+        }
+      }
+    }
 
     // IDDS & UPF Calculations
     const consumedGroupsMap = new Map<string, { id: string; name: string; isUpf: boolean; count: number }>();

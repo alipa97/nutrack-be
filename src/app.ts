@@ -8,7 +8,11 @@ import { errorHandler, notFoundHandler } from './middlewares/errorHandler.js';
 export const createApp = () => {
   const app = express();
 
-  app.use(helmet());
+  app.use(
+    helmet({
+      crossOriginResourcePolicy: { policy: 'cross-origin' },
+    }),
+  );
   app.use(cors());
   app.use(express.json({ limit: '10mb' }));
   app.use(morgan('dev'));
