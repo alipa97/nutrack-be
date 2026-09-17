@@ -7,12 +7,19 @@ const reminderSchema = z.object({
   description: z.string().min(1),
   reminderTime: z.string().min(1),
   isEnabled: z.boolean().default(true),
-  isDefault: z.boolean().optional(),
+  category: z.string().optional(),
+  subType: z.string().optional(),
+  optionNumber: z.number().int().optional(),
+  templateId: z.string().uuid().optional(),
   iconKey: z.string().optional(),
   repeatRule: z.string().optional(),
 });
 
 export const reminderController = {
+  async getTemplates(_req: Request, res: Response) {
+    res.json(await reminderService.getTemplates());
+  },
+
   async list(req: Request, res: Response) {
     const userId = (req as Request & { user?: { id: string } }).user?.id;
     if (!userId) return void res.status(401).json({ message: 'Unauthorized' });

@@ -23,4 +23,25 @@ export const bctController = {
     const date = parsed.completionDate ? new Date(parsed.completionDate) : new Date();
     res.json(await bctService.toggleComplete(userId, String(req.params.id), date));
   },
+
+  /**
+   * GET /food-evaluations?period=daily|weekly&date=YYYY-MM-DD
+   * Returns dynamic evaluations for 13 food groups based on user's actual consumption.
+   */
+  async foodEvaluations(req: Request, res: Response) {
+    const userId = (req as Request & { user?: { id: string } }).user?.id;
+    if (!userId) return void res.status(401).json({ message: 'Unauthorized' });
+
+    const period = req.query.period === 'weekly' ? 'weekly' : 'daily';
+    const date = typeof req.query.date === 'string' ? new Date(req.query.date) : new Date();
+    res.json(await bctService.getFoodGroupEvaluations(userId, period, date));
+  },
+
+  /**
+   * GET /food-recommendations or /food-group-recommendations
+   * Returns all 13 official Food Group Recommendations master data from Client PDF.
+   */
+  async foodRecommendations(_req: Request, res: Response) {
+    res.json(await bctService.getFoodGroupRecommendations());
+  },
 };

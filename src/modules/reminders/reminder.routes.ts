@@ -5,6 +5,7 @@ import { reminderController } from './reminder.controller.js';
 
 export const reminderRouter = Router();
 
+reminderRouter.get('/templates', requireAuth, asyncHandler(reminderController.getTemplates));
 reminderRouter.get('/', requireAuth, asyncHandler(reminderController.list));
 reminderRouter.post('/', requireAuth, asyncHandler(reminderController.create));
 reminderRouter.put('/:id', requireAuth, asyncHandler(reminderController.update));

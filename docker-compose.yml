@@ -1,3 +1,5 @@
+version: '3.8'
+
 services:
   postgres:
     image: postgres:16-alpine
@@ -11,6 +13,44 @@ services:
       - "5432:5432"
     volumes:
       - nutrack_pgdata:/var/lib/postgresql/data
+    networks:
+      - nutrack_network
+
+  nutrack-be:
+    build: .
+    container_name: nutrack_be
+    restart: unless-stopped
+    ports:
+      - "4000:4000"
+    environment:
+      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/nutrack?schema=public
+      - JWT_SECRET=change-me-in-production
+      - AI_SERVICE_URL=http://nutrack-ai:8000
+    depends_on:
+      - postgres
+      - nutrack-ai
+    networks:
+      - nutrack_network
+
+  nutrack-ai:
+    build: ./ai-service
+    container_name: nutrack_ai_backend
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      - MODEL_PATH=/app/model/best.pt
+      - CONFIDENCE_THRESHOLD=0.90
+      - IMGSZ=224
+      - MAX_FILE_SIZE_MB=10
+      - AI_SERVICE_PORT=8000
+    volumes:
+      - "C:/Users/Narendra/runs/classify/food_v3/weights/best.pt:/app/model/best.pt:ro"
+    networks:
+      - nutrack_network
 
 volumes:
   nutrack_pgdata:
+
+networks:
+  nutrack_network:
