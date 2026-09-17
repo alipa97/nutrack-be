@@ -17,4 +17,5 @@ export const env = {
   jwtExpiresIn: process.env.JWT_EXPIRES_IN ?? '7d',
   geminiApiKey: process.env.GEMINI_API_KEY ?? '',
   geminiModel: process.env.GEMINI_MODEL ?? 'gemini-1.5-flash',
+  aiServiceUrl: process.env.AI_SERVICE_URL ?? 'http://localhost:8000',
 };
