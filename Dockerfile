@@ -1,9 +1,8 @@
 FROM node:22-alpine AS builder
 
 WORKDIR /app
-
-RUN apk add --no-cache openssl
-
+RUN sed -i 's/dl-cdn.alpinelinux.org/mirrors.aliyun.com/g' /etc/apk/repositories && \
+    apk add --no-cache openssl
 # Copy package files
 COPY package*.json ./
 COPY prisma ./prisma/
@@ -24,9 +23,8 @@ RUN npm run build
 FROM node:22-alpine
 
 WORKDIR /app
-
-RUN apk add --no-cache openssl
-
+RUN sed -i 's/dl-cdn.alpinelinux.org/mirrors.aliyun.com/g' /etc/apk/repositories && \
+    apk add --no-cache openssl
 COPY --from=builder /app/package*.json ./
 COPY --from=builder /app/prisma ./prisma/
 
