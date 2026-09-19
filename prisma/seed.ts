@@ -59,7 +59,7 @@ async function main() {
     { name: 'jeruk', group: 'Buah Lainnya' },
     { name: 'melon', group: 'Buah Lainnya' },
     { name: 'pepaya', group: 'Buah Kaya Vitamin A' },
-    { name: 'pisang_potong', group: 'Buah Lainnya' },
+    { name: 'pisang', group: 'Buah Lainnya' },
     { name: 'semangka', group: 'Buah Lainnya' },
     { name: 'sayur_bayam', group: 'Sayuran Hijau Berdaun Gelap' },
     { name: 'sayur_asam', group: 'Sayuran Lainnya' },
@@ -71,9 +71,9 @@ async function main() {
     { name: 'nasi putih', group: 'Serealia' },
     { name: 'nasi_putih', group: 'Serealia' },
     { name: 'mie', group: 'Serealia' },
-    { name: 'bihun', group: 'Serealia' },
+    { name: 'bihun_goreng', group: 'Serealia' },
     { name: 'lontong', group: 'Serealia' },
-    { name: 'pasta', group: 'Serealia' },
+    { name: 'spaghetti', group: 'Serealia' },
     { name: 'roti', group: 'Serealia' },
     { name: 'sereal', group: 'Serealia' },
     { name: 'singkong', group: 'Umbi & Akar Putih' },
@@ -86,7 +86,8 @@ async function main() {
     { name: 'gulai_ikan', group: 'Ikan' },
     { name: 'pepes_ikan', group: 'Ikan' },
     { name: 'ceker_ayam', group: 'Daging' },
-    { name: 'telur', group: 'Telur' },
+    { name: 'telur_dadar', group: 'Telur' },
+    { name: 'telur_rebus', group: 'Telur' },
     { name: 'telur_balado', group: 'Telur' },
     { name: 'udang', group: 'Ikan' },
     { name: 'rendang', group: 'Daging' },
@@ -95,7 +96,7 @@ async function main() {
     { name: 'sate_telur', group: 'Telur' },
     { name: 'pecel_lele', group: 'Ikan' },
     { name: 'opor_ayam', group: 'Daging' },
-    { name: 'tongseng', group: 'Daging' },
+    { name: 'tongseng_kambing', group: 'Daging' },
     { name: 'nugget', group: 'Daging' },
     { name: 'sosis', group: 'Daging' },
     { name: 'tahu', group: 'Kacang-kacangan, Biji-bijian & Polong' },
@@ -146,6 +147,19 @@ async function main() {
     { name: 'Minuman bersoda', group: 'UPF (Ultra-Processed Food)' },
     { name: 'Teh kemasan manis siap minum', group: 'UPF (Ultra-Processed Food)' },
   ];
+
+  // Clean up old catalog names replaced by model adjustments
+  const deprecatedNames = ['pisang_potong', 'bihun', 'pasta', 'telur', 'tongseng'];
+  for (const oldName of deprecatedNames) {
+    const existing = await prisma.foodCatalog.findUnique({ where: { name: oldName } });
+    if (existing) {
+      await prisma.foodLog.updateMany({
+        where: { foodCatalogId: existing.id },
+        data: { foodCatalogId: null },
+      });
+      await prisma.foodCatalog.delete({ where: { id: existing.id } });
+    }
+  }
 
   for (const item of baseFoods) {
     const foodGroupId = getGroupId(item.group);
