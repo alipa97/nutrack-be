@@ -46,7 +46,22 @@ export const foodService = {
   },
 
   async createLog(userId: string, input: CreateFoodLogInput) {
-    const loggedAt = input.loggedAt ? new Date(input.loggedAt) : new Date();
+    let loggedAt: Date;
+    if (input.loggedAt) {
+      if (typeof input.loggedAt === 'string') {
+        const str = input.loggedAt.trim();
+        // If ISO string has no timezone (e.g. "2026-09-30T22:34:43"), treat as Asia/Jakarta (+07:00)
+        if (!str.endsWith('Z') && !/[+-]\d{2}(:\d{2})?$/.test(str)) {
+          loggedAt = new Date(`${str}+07:00`);
+        } else {
+          loggedAt = new Date(str);
+        }
+      } else {
+        loggedAt = new Date(input.loggedAt);
+      }
+    } else {
+      loggedAt = new Date();
+    }
 
     let catalogId = input.foodCatalogId ?? undefined;
     if (!catalogId) {

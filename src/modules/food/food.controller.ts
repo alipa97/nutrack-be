@@ -24,7 +24,12 @@ export const foodController = {
     if (!userId) return void res.status(401).json({ message: 'Unauthorized' });
 
     const date = typeof req.query.date === 'string' ? req.query.date : undefined;
-    res.json(await foodService.listLogs(userId, date));
+    const result = await foodService.listLogs(userId, date);
+
+    console.log(`[GET /api/v1/food/logs] Query date: ${date}, UserId: ${userId}, Count: ${result.length}`);
+    console.log("RESPONSE BODY:", JSON.stringify(result, null, 2));
+
+    res.json(result);
   },
 
   async create(req: Request, res: Response) {
@@ -32,7 +37,12 @@ export const foodController = {
     if (!userId) return void res.status(401).json({ message: 'Unauthorized' });
 
     const parsed = createFoodLogSchema.parse(req.body);
-    res.status(201).json(await foodService.createLog(userId, parsed));
+    const result = await foodService.createLog(userId, parsed);
+
+    console.log(`[POST /api/v1/food/logs] Created log for userId: ${userId}, foodName: ${result.foodName}, loggedAt: ${result.loggedAt.toISOString()}`);
+    console.log("RESPONSE BODY:", JSON.stringify(result, null, 2));
+
+    res.status(201).json(result);
   },
 
   async delete(req: Request, res: Response) {
