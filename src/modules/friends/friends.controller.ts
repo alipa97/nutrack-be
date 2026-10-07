@@ -10,6 +10,22 @@ export const friendsController = {
     res.json(friends);
   },
 
+  async listFollowers(req: Request, res: Response) {
+    const userId = (req as Request & { user?: { id: string } }).user?.id;
+    if (!userId) return void res.status(401).json({ message: 'Unauthorized' });
+
+    const followers = await friendsService.listFollowers(userId);
+    res.json(followers);
+  },
+
+  async listFollowing(req: Request, res: Response) {
+    const userId = (req as Request & { user?: { id: string } }).user?.id;
+    if (!userId) return void res.status(401).json({ message: 'Unauthorized' });
+
+    const following = await friendsService.listFollowing(userId);
+    res.json(following);
+  },
+
   async toggleFollow(req: Request, res: Response) {
     const userId = (req as Request & { user?: { id: string } }).user?.id;
     if (!userId) return void res.status(401).json({ message: 'Unauthorized' });

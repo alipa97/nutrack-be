@@ -573,5 +573,104 @@ export const friendsService = {
       }
     }
   },
+
+  async listFollowers(userId: string) {
+    const follows = await prisma.userFollow.findMany({
+      where: { followingId: userId },
+      include: {
+        follower: {
+          include: {
+            profile: true,
+            badges: {
+              where: { isUnlocked: true },
+              include: { badge: true },
+            },
+          },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    const followerIds = follows.map((f) => f.followerId);
+    const myFollowing = await prisma.userFollow.findMany({
+      where: {
+        followerId: userId,
+        followingId: { in: followerIds },
+      },
+      select: { followingId: true },
+    });
+    const myFollowingSet = new Set(myFollowing.map((f) => f.followingId));
+
+    return follows.map((f) => {
+      const u = f.follower;
+      const prof = u.profile;
+      const isFollowing = myFollowingSet.has(u.id);
+      return {
+        id: u.id,
+        name: prof?.name ?? u.email.split('@')[0],
+        email: u.email,
+        bio: prof?.bio ?? 'Remaja Peduli Gizi Seimbang & Aktif Bergerak! 🥗',
+        school: prof?.school ?? '',
+        avatarLetter: prof?.avatarLetter ?? (prof?.name?.[0] ?? 'A').toUpperCase(),
+        xp: prof?.xp ?? 0,
+        currentStreakDays: prof?.currentStreakDays ?? 0,
+        badges: u.badges.map((b) => b.badge.title),
+        isFollower: true,
+        isFollowing,
+        isMutual: isFollowing,
+        followedAt: f.createdAt.toISOString(),
+      };
+    });
+  },
+
+  async listFollowing(userId: string) {
+    const follows = await prisma.userFollow.findMany({
+      where: { followerId: userId },
+      include: {
+        following: {
+          include: {
+            profile: true,
+            badges: {
+              where: { isUnlocked: true },
+              include: { badge: true },
+            },
+          },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    const followingIds = follows.map((f) => f.followingId);
+    const followers = await prisma.userFollow.findMany({
+      where: {
+        followerId: { in: followingIds },
+        followingId: userId,
+      },
+      select: { followerId: true },
+    });
+    const followersSet = new Set(followers.map((f) => f.followerId));
+
+    return follows.map((f) => {
+      const u = f.following;
+      const prof = u.profile;
+      const isFollower = followersSet.has(u.id);
+      return {
+        id: u.id,
+        name: prof?.name ?? u.email.split('@')[0],
+        email: u.email,
+        bio: prof?.bio ?? 'Remaja Peduli Gizi Seimbang & Aktif Bergerak! 🥗',
+        school: prof?.school ?? '',
+        avatarLetter: prof?.avatarLetter ?? (prof?.name?.[0] ?? 'A').toUpperCase(),
+        xp: prof?.xp ?? 0,
+        currentStreakDays: prof?.currentStreakDays ?? 0,
+        badges: u.badges.map((b) => b.badge.title),
+        isFollower,
+        isFollowing: true,
+        isMutual: isFollower,
+        followedAt: f.createdAt.toISOString(),
+      };
+    });
+  },
 };
+
 

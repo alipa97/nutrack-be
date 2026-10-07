@@ -8,6 +8,8 @@ export const friendsRouter = Router();
 friendsRouter.use(requireAuth);
 
 friendsRouter.get('/', asyncHandler(friendsController.list));
+friendsRouter.get('/followers', asyncHandler(friendsController.listFollowers));
+friendsRouter.get('/following', asyncHandler(friendsController.listFollowing));
 friendsRouter.get('/search', asyncHandler(friendsController.search));
 friendsRouter.post('/:id/follow', asyncHandler(friendsController.toggleFollow));
 friendsRouter.post('/streak/invite', asyncHandler(friendsController.inviteStreak));
