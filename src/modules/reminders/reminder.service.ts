@@ -124,26 +124,53 @@ export const reminderService = {
       throw Object.assign(new Error('Reminder not found'), { statusCode: 404 });
     }
 
-    // Handle template option switch if explicitly specified
-    let templateId = existing.templateId;
-    if (input.optionNumber && input.optionNumber !== existing.optionNumber && existing.templateId) {
-      const targetTemplate = await prisma.reminderTemplate.findFirst({
-        where: {
-          reminderTime: existing.reminderTime,
-          optionNumber: input.optionNumber,
-          category: existing.category,
+    // Template-based reminder: only allow toggling isEnabled or switching optionNumber (1 <-> 2)
+    if (existing.templateId) {
+      if (input.optionNumber && input.optionNumber !== existing.optionNumber) {
+        const targetTemplate = await prisma.reminderTemplate.findFirst({
+          where: {
+            reminderTime: existing.reminderTime,
+            optionNumber: input.optionNumber,
+            category: existing.category,
+          },
+        });
+
+        if (targetTemplate) {
+          const updated = await prisma.smartReminder.update({
+            where: { id: reminderId },
+            data: {
+              templateId: targetTemplate.id,
+              optionNumber: targetTemplate.optionNumber,
+              title: targetTemplate.title,
+              description: targetTemplate.description,
+              iconKey: targetTemplate.iconKey,
+              ...(typeof input.isEnabled === 'boolean' ? { isEnabled: input.isEnabled } : {}),
+            },
+          });
+          return {
+            ...updated,
+            isDefault: true,
+          };
+        }
+      }
+
+      // Just toggle isEnabled for template reminder
+      const updated = await prisma.smartReminder.update({
+        where: { id: reminderId },
+        data: {
+          ...(typeof input.isEnabled === 'boolean' ? { isEnabled: input.isEnabled } : {}),
         },
       });
-      if (targetTemplate) {
-        templateId = targetTemplate.id;
-      }
+      return {
+        ...updated,
+        isDefault: true,
+      };
     }
 
+    // Custom reminder: allow editing all fields
     const updated = await prisma.smartReminder.update({
       where: { id: reminderId },
       data: {
-        ...(templateId !== existing.templateId ? { templateId } : {}),
-        ...(input.optionNumber !== undefined ? { optionNumber: input.optionNumber } : {}),
         ...(input.title !== undefined ? { title: input.title } : {}),
         ...(input.description !== undefined ? { description: input.description } : {}),
         ...(input.reminderTime !== undefined ? { reminderTime: input.reminderTime } : {}),
@@ -157,7 +184,7 @@ export const reminderService = {
 
     return {
       ...updated,
-      isDefault: updated.templateId !== null,
+      isDefault: false,
     };
   },
 

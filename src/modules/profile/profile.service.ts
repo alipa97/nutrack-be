@@ -6,6 +6,7 @@ import {
   getBctAdvice,
   getNutritionalStatus,
 } from '../../utils/bmi.js';
+import { calculateStreakDays } from '../../utils/streak.js';
 
 type UpdateProfileInput = {
   name?: string;
@@ -17,7 +18,15 @@ type UpdateProfileInput = {
 
 export const profileService = {
   async getCurrent(userId: string) {
-    const [user, latestMeasurement, measurementHistory] = await Promise.all([
+    const [
+      user,
+      latestMeasurement,
+      measurementHistory,
+      followersCount,
+      followingCount,
+      activeStreaks,
+      foodLogs,
+    ] = await Promise.all([
       prisma.user.findUnique({
         where: { id: userId },
         include: { profile: true },
@@ -31,10 +40,41 @@ export const profileService = {
         orderBy: { measuredAt: 'desc' },
         take: 12,
       }),
+      prisma.userFollow.count({ where: { followingId: userId } }),
+      prisma.userFollow.count({ where: { followerId: userId } }),
+      prisma.streakPartner.findMany({
+        where: {
+          OR: [{ userId }, { partnerId: userId }],
+          status: 'active',
+        },
+      }),
+      prisma.foodLog.findMany({
+        where: { userId },
+        select: { loggedAt: true },
+        orderBy: { loggedAt: 'desc' },
+      }),
     ]);
 
     if (!user || !user.profile) {
       throw Object.assign(new Error('Profile not found'), { statusCode: 404 });
+    }
+
+    const partnerStreakDays = activeStreaks.length > 0 ? Math.max(...activeStreaks.map((s) => s.streakDays)) : 0;
+    const personalStreak = calculateStreakDays(foodLogs.map((l) => l.loggedAt));
+    const currentStreakDays = Math.max(personalStreak, partnerStreakDays, user.profile.currentStreakDays ?? 0);
+    const longestStreakDays = Math.max(currentStreakDays, user.profile.longestStreakDays ?? 0);
+
+    // Sync streak updates to DB if changed
+    if (
+      currentStreakDays !== user.profile.currentStreakDays ||
+      longestStreakDays !== user.profile.longestStreakDays
+    ) {
+      await prisma.userProfile
+        .update({
+          where: { userId },
+          data: { currentStreakDays, longestStreakDays },
+        })
+        .catch((err) => console.error('Failed to sync streak to user profile:', err));
     }
 
     const age = calculateAge(user.profile.birthDate);
@@ -51,6 +91,12 @@ export const profileService = {
       },
       profile: {
         ...user.profile,
+        xp: user.profile.xp,
+        currentStreakDays,
+        longestStreakDays,
+        followersCount,
+        followingCount,
+        partnerStreakDays,
         ageYears: age.years,
         ageMonths: age.months,
         totalAgeMonths: age.totalMonths,

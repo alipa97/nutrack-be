@@ -1,6 +1,7 @@
 import { Prisma } from '@prisma/client';
 import { prisma } from '../../config/prisma.js';
 import { endOfDay, startOfDay } from '../../utils/date.js';
+import { calculateStreakDays } from '../../utils/streak.js';
 import { extractFoodGroupsFromLog, generateAllFoodGroupEvaluations } from '../../utils/foodRecommendations.js';
 import { friendsService } from '../friends/friends.service.js';
 import { gamificationService } from '../gamification/gamification.service.js';
@@ -171,6 +172,52 @@ export const foodService = {
         },
       },
     });
+
+    // Award daily consistency XP on first food log of the day (prevent duplicate reward on same day)
+    const dayStart = startOfDay(loggedAt);
+    const dayEnd = endOfDay(loggedAt);
+    const previousTodayLogsCount = await prisma.foodLog.count({
+      where: {
+        userId,
+        loggedAt: { gte: dayStart, lte: dayEnd },
+        id: { not: foodLog.id },
+      },
+    });
+
+    if (previousTodayLogsCount === 0) {
+      await prisma.userProfile
+        .update({
+          where: { userId },
+          data: { xp: { increment: 10 } },
+        })
+        .catch((err) => console.error('Failed to increment daily food log XP:', err));
+    }
+
+    // Update streak in userProfile
+    const allUserLogs = await prisma.foodLog.findMany({
+      where: { userId },
+      select: { loggedAt: true },
+    });
+    const personalStreak = calculateStreakDays(
+      allUserLogs.map((l) => l.loggedAt),
+      loggedAt
+    );
+    const existingProf = await prisma.userProfile.findUnique({ where: { userId } });
+    if (existingProf) {
+      const newStreak = Math.max(personalStreak, existingProf.currentStreakDays ?? 0);
+      const newLongest = Math.max(newStreak, existingProf.longestStreakDays ?? 0);
+      if (newStreak !== existingProf.currentStreakDays || newLongest !== existingProf.longestStreakDays) {
+        await prisma.userProfile
+          .update({
+            where: { userId },
+            data: {
+              currentStreakDays: newStreak,
+              longestStreakDays: newLongest,
+            },
+          })
+          .catch((err) => console.error('Failed to update streak on food log:', err));
+      }
+    }
 
     // Evaluate gamification challenges asynchronously
     gamificationService.evaluateWeeklyChallenges(userId, loggedAt).catch((err) => {

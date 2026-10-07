@@ -342,7 +342,7 @@ export const gamificationService = {
       badgeCode = 'master_tracker';
     }
 
-    const [userChallenge] = await prisma.$transaction([
+    const [userChallenge, updatedProfile] = await prisma.$transaction([
       prisma.userWeeklyChallenge.update({
         where: { id: existing.id },
         data: {
@@ -350,7 +350,7 @@ export const gamificationService = {
           completedAt: new Date(),
         },
       }),
-      prisma.userProfile.updateMany({
+      prisma.userProfile.update({
         where: { userId },
         data: { xp: { increment: challenge.rewardXp } },
       }),
@@ -385,6 +385,8 @@ export const gamificationService = {
     return {
       message: 'Hadiah tantangan mingguan berhasil diklaim!',
       rewardXp: challenge.rewardXp,
+      xp: updatedProfile.xp,
+      userXpPoints: updatedProfile.xp,
       badgeUnlocked: badgeCode || null,
       userChallenge,
     };

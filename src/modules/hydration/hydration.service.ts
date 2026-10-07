@@ -52,6 +52,18 @@ export const hydrationService = {
     });
 
 
+    // Award +10 XP on first time reaching daily hydration goal today
+    let xpAwarded = 0;
+    if (targetWaterMl > 0 && previousTotal < targetWaterMl && newTotal >= targetWaterMl) {
+      xpAwarded = 10;
+      await prisma.userProfile
+        .update({
+          where: { userId },
+          data: { xp: { increment: 10 } },
+        })
+        .catch((err) => console.error('Failed to increment hydration goal XP:', err));
+    }
+
     // Evaluate gamification weekly challenges asynchronously
     gamificationService.evaluateWeeklyChallenges(userId).catch((err) => {
       console.error('Failed to evaluate gamification challenges on water log:', err);
@@ -62,7 +74,7 @@ export const hydrationService = {
       currentWaterMl: newTotal,
       targetWaterMl,
       waterRatio: targetWaterMl > 0 ? Math.min(1.0, newTotal / targetWaterMl) : 0,
-      xpAwarded: 0,
+      xpAwarded,
     };
   },
 

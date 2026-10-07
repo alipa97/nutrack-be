@@ -560,15 +560,30 @@ export const friendsService = {
           data: { streakDays: res.streakDays },
         });
 
+        // Sync to userProfile currentStreakDays if partner streak exceeds it
+        if (res.streakDays > (userProfile?.currentStreakDays ?? 0)) {
+          await prisma.userProfile
+            .update({
+              where: { userId },
+              data: {
+                currentStreakDays: res.streakDays,
+                longestStreakDays: Math.max(userProfile?.longestStreakDays ?? 0, res.streakDays),
+              },
+            })
+            .catch(() => {});
+        }
+
         // Jika streak hari ini baru saja menyala dan bertambah, kirim notifikasi ke rekan
         if (res.isStreakLitToday && res.streakDays > 0) {
-          await notificationsService.createNotification({
-            userId: pId,
-            senderId: userId,
-            type: 'streak_accept',
-            title: 'Streak Menyala! 🔥',
-            message: `${userName} baru saja scan makanan! Streak kalian hari ini resmi menyala (${res.streakDays} Hari).`,
-          }).catch(() => {});
+          await notificationsService
+            .createNotification({
+              userId: pId,
+              senderId: userId,
+              type: 'streak_accept',
+              title: 'Streak Menyala! 🔥',
+              message: `${userName} baru saja scan makanan! Streak kalian hari ini resmi menyala (${res.streakDays} Hari).`,
+            })
+            .catch(() => {});
         }
       }
     }
